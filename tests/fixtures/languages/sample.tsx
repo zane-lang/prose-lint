@@ -8,3 +8,10 @@ const nested = (
   </ul>
 ); // The list decides the order.
 const pick = <T,>(value: T) => value; // The helper wants a type.
+const base = <Base extends>don't {/* The base knows the parent. */}</Base>;
+const tagged = (
+  <div
+    // The tag wants an id.
+    id="x" /* The class decides the colour. */ className="y"
+  >it's</div>
+); // The wrapper knows the size.

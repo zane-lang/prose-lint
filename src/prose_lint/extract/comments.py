@@ -185,8 +185,9 @@ class _CStyle:
 
 # A JSX element opens with ``<>`` or with a tag name that a space, ``/``,
 # ``>`` or ``{`` follows. A TypeScript type parameter list such as
-# ``<T,>`` or ``<T extends U>`` opens none.
-JSX_START_RE = re.compile(r"<(?:>|[A-Za-z_$][\w$.:-]*(?=[\s/>{])(?!\s*,)(?!\s+extends\b))")
+# ``<T,>`` or ``<T extends U>`` opens none, while an attribute named
+# ``extends``, as in ``<Base extends />``, has no type name after it.
+JSX_START_RE = re.compile(r"<(?:>|[A-Za-z_$][\w$.:-]*(?=[\s/>{])(?!\s*,)(?!\s+extends\s+[A-Za-z_$]))")
 
 
 def lex_c(
@@ -321,11 +322,25 @@ def _skip_jsx(src: str, i: int, s: Source, out: list[RawComment], o: _CStyle) ->
 
 
 def _skip_jsx_tag(src: str, i: int, s: Source, out: list[RawComment], o: _CStyle) -> tuple[int, bool]:
-    """Return the offset after the JSX tag at ``i`` and whether the tag closes itself (``<br />``)."""
+    """Return the offset after the JSX tag at ``i`` and whether the tag closes itself (``<br />``).
+
+    A tag may hold ``/* */`` and ``//`` comments between its attributes,
+    which the lexer appends to ``out``.
+    """
     j, n = i + 1, len(src)
     while j < n:
         ch = src[j]
-        if ch in "\"'":
+        if o.block_comments and src.startswith("/*", j):
+            close = src.find("*/", j + 2)
+            end = n if close < 0 else close
+            out.append(RawComment("block", min(j + 2, end), end, s.own_line(j)))
+            j = n if close < 0 else close + 2
+        elif o.line_comments and src.startswith("//", j):
+            end = src.find("\n", j)
+            end = n if end < 0 else end
+            out.append(RawComment("line", j + 2, end, s.own_line(j), "/"))
+            j = end
+        elif ch in "\"'":
             close = src.find(ch, j + 1)
             j = n if close < 0 else close + 1
         elif ch == "{":
