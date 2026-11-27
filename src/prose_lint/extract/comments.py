@@ -211,7 +211,8 @@ def lex_c(
             i = _skip_string(src, i, '"', multiline=False)
         elif js and ch == "'" and i and (src[i - 1].isalnum() or src[i - 1] == "_"):
             # No JavaScript string opens right after a word, so this is an
-            # apostrophe in JSX text, such as "don't".
+            # apostrophe in element text, such as "don't" in the Astro
+            # expression {open && <p>don't</p>}.
             i += 1
         elif js and ch == "'":
             i = _skip_string(src, i, "'", multiline=False)

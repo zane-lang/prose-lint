@@ -46,7 +46,7 @@ def test_setext_heading_is_a_heading(lint):
         ("Proof.lean", "lean"),
         ("Page.astro", "astro"),
         ("site.mjs", "javascript"),
-        ("view.tsx", "javascript"),
+        ("main.ts", "javascript"),
         ("zane.cr", "hash"),
         ("flake.nix", "nix"),
         ("install.ps1", "hash"),
