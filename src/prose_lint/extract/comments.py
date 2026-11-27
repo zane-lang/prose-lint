@@ -85,25 +85,68 @@ C_CHAR_RE = re.compile(r"'(?:\\.[^'\n]{0,8}|[^\\'\n])'")
 CPP_RAW_RE = re.compile(r'(?:u8|[uUL])?R"([^()\\ \t\n]{0,16})\(')
 
 
+def _scan_template(src: str, j: int) -> tuple[int, bool]:
+    """Scan a template literal from ``j``, just after a backtick or a ``}``.
+
+    Return the offset after the closing backtick and ``False``, or the offset
+    after a ``${`` and ``True`` when a substitution starts there.
+    """
+    n = len(src)
+    while j < n:
+        if src[j] == "\\":
+            j += 2
+        elif src[j] == "`":
+            return j + 1, False
+        elif src.startswith("${", j):
+            return j + 2, True
+        else:
+            j += 1
+    return n, False
+
+
 def lex_c(
-    src: str, *, block_comments: bool = True, char_literals: bool = True, js: bool = False
+    src: str,
+    *,
+    block_comments: bool = True,
+    line_comments: bool = True,
+    char_literals: bool = True,
+    js: bool = False,
 ) -> list[RawComment]:
-    """Lex C and C++ (``block_comments``), Zane (line comments only) or JavaScript (``js``).
+    """Lex C and C++ (``block_comments``), Zane (line comments only), JavaScript (``js``) or CSS.
 
     JavaScript and TypeScript quote strings with ``'`` as well as ``"``, and
-    template literals in backticks span lines.
+    template literals in backticks span lines. The expression in a
+    template's ``${ }`` substitution is code, so the lexer reads its
+    comments. CSS (``js`` without ``line_comments``) has only ``/* */``
+    comments, so ``//`` in ``url(https://...)`` starts none.
     """
     s = Source(src)
     out: list[RawComment] = []
     i, n = 0, len(src)
+    # One brace depth per open template substitution, innermost last.
+    subs: list[int] = []
     while i < n:
         ch = src[i]
-        if ch == '"':
+        if subs and ch == "{":
+            subs[-1] += 1
+            i += 1
+        elif subs and ch == "}":
+            if subs[-1]:
+                subs[-1] -= 1
+                i += 1
+            else:
+                subs.pop()
+                i, inner = _scan_template(src, i + 1)
+                if inner:
+                    subs.append(0)
+        elif ch == '"':
             i = _skip_string(src, i, '"', multiline=False)
         elif js and ch == "'":
             i = _skip_string(src, i, "'", multiline=False)
         elif js and ch == "`":
-            i = _skip_string(src, i, "`", multiline=True)
+            i, inner = _scan_template(src, i + 1)
+            if inner:
+                subs.append(0)
         elif js and ch in "uULR":
             i += 1
         elif ch == "'" and char_literals:
@@ -116,7 +159,7 @@ def lex_c(
                 i = n if close < 0 else close + len(m.group(1)) + 2
             else:
                 i += 1
-        elif src.startswith("//", i):
+        elif line_comments and src.startswith("//", i):
             j = i
             while j < n and src[j] == "/":
                 j += 1
@@ -253,7 +296,12 @@ def _skip_single(src: str, i: int) -> int:
     return close + 1
 
 
-def lex_dune(src: str) -> list[RawComment]:
+def lex_dune(src: str, *, scheme: bool = False) -> list[RawComment]:
+    """Lex dune files, or Scheme (``scheme``).
+
+    Scheme block comments nest, and a character literal such as ``#\\;``
+    or ``#\\"`` holds a character that starts no comment or string.
+    """
     s = Source(src)
     out: list[RawComment] = []
     i, n = 0, len(src)
@@ -261,6 +309,22 @@ def lex_dune(src: str) -> list[RawComment]:
         ch = src[i]
         if ch == '"':
             i = _skip_string(src, i, '"', multiline=True)
+        elif scheme and src.startswith("#\\", i):
+            i += 3
+        elif scheme and src.startswith("#|", i):
+            depth, j = 1, i + 2
+            while j < n and depth:
+                if src.startswith("#|", j):
+                    depth += 1
+                    j += 2
+                elif src.startswith("|#", j):
+                    depth -= 1
+                    j += 2
+                else:
+                    j += 1
+            end = j - 2 if depth == 0 else n
+            out.append(RawComment("block", i + 2, max(i + 2, end), s.own_line(i)))
+            i = j
         elif src.startswith("#|", i):
             close = src.find("|#", i + 2)
             end = n if close < 0 else close
@@ -462,7 +526,7 @@ def lex_astro(src: str) -> list[RawComment]:
 
     The ``---`` fenced frontmatter and each ``<script>`` and ``<style>``
     element hold JavaScript, TypeScript or CSS, which the JavaScript lexer
-    reads. The template between them holds HTML comments (``<!-- -->``)
+    reads, with ``/* */`` comments alone in CSS. The template between them holds HTML comments (``<!-- -->``)
     and JSX-style comments in expressions (``{/* */}``).
     """
     s = Source(src)
@@ -486,7 +550,8 @@ def lex_astro(src: str) -> list[RawComment]:
             i = n if close < 0 else close + 2
         elif src[i] == "<" and ASTRO_RAW_RE.match(src, i):
             r = ASTRO_RAW_RE.match(src, i)
-            out.extend(_shifted(lex_c(r.group(2), js=True), r.start(2)))
+            css = r.group(1).lower() == "style"
+            out.extend(_shifted(lex_c(r.group(2), js=True, line_comments=not css), r.start(2)))
             i = r.end()
         else:
             i += 1
@@ -700,6 +765,8 @@ def extract_comments(src: str, language: str) -> Extracted:
         return comments_to_segments(src, lex_hash(src, toml=True), COMMENT)
     if language == "dune":
         return comments_to_segments(src, lex_dune(src), COMMENT)
+    if language == "scheme":
+        return comments_to_segments(src, lex_dune(src, scheme=True), COMMENT)
     if language == "javascript":
         return comments_to_segments(src, lex_c(src, js=True), COMMENT, tags=True)
     if language == "lua":

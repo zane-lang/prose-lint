@@ -8,5 +8,6 @@ export function f(size: number): string {
   const b = `line one
   // The value knows the size.
   ${size}`;
-  return a + b;
+  const c = `total: ${size /* The counter wants a reset. */ + 1}, ${`inner ${size}`} // not a comment`;
+  return a + b + c;
 }

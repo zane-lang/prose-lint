@@ -135,11 +135,12 @@ mentioned above".
 | `python` | `.py`, `.pyi` | `#` comments and docstrings |
 | `hash` | `.sh`, `.bash`, `.zsh`, `.yml`, `.yaml`, `.mk`, `.cmake`, `.opam`, `.cr`, `.nix`, `.ps1`, `.psm1`, `Makefile`, `GNUmakefile`, `makefile`, `justfile`, `Justfile`, `.justfile`, `Dockerfile`, `CMakeLists.txt` | `#` comments |
 | `toml` | `.toml` | `#` comments |
-| `dune` | `dune`, `dune-project`, `dune-workspace`, `.scm` | `;` and `#| |#` comments |
-| `javascript` | `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx` | `//` and `/* */` comments |
-| `lua` | `.lua` | `--` and `--[[ ]]` comments |
+| `dune` | `dune`, `dune-project`, `dune-workspace` | `;` and `#| |#` comments |
+| `scheme` | `.scm` | `;` comments and `#| |#` comments, nested |
+| `javascript` | `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx` | `//` and `/* */` comments, including those inside a template literal's `${ }` substitution |
+| `lua` | `.lua` | `--` comments and `--[[ ]]` block comments, including long brackets with `=` signs such as `--[==[ ]==]` |
 | `lean` | `.lean` | `--` comments and `/- -/` comments, nested, with `/-- -/` and `/-! -/` doc comments |
-| `astro` | `.astro` | HTML comments and `{/* */}` in the template; JavaScript comments in the `---` frontmatter and in `<script>` and `<style>` elements |
+| `astro` | `.astro` | HTML comments and `{/* */}` in the template; JavaScript comments in the `---` frontmatter and `<script>` elements, and `/* */` comments in `<style>` elements |
 
 Each lexer reads string and character literals as well as comments, so a
 comment marker inside a string literal starts no comment. Before analysis,

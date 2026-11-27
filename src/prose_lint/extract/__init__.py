@@ -12,7 +12,7 @@ from ..segment import Extracted
 from .blocks import parse_blocks
 from .comments import Source, extract_comments
 
-LANGUAGES = ("markdown", "ocaml", "c", "zane", "python", "hash", "toml", "dune", "javascript", "lua", "lean", "astro")
+LANGUAGES = ("markdown", "ocaml", "c", "zane", "python", "hash", "toml", "dune", "scheme", "javascript", "lua", "lean", "astro")
 
 EXTENSIONS = {
     ".md": "markdown",
@@ -44,7 +44,7 @@ EXTENSIONS = {
     ".nix": "hash",
     ".ps1": "hash",
     ".psm1": "hash",
-    ".scm": "dune",
+    ".scm": "scheme",
     ".js": "javascript",
     ".mjs": "javascript",
     ".cjs": "javascript",

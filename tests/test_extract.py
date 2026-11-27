@@ -50,7 +50,7 @@ def test_setext_heading_is_a_heading(lint):
         ("zane.cr", "hash"),
         ("flake.nix", "hash"),
         ("install.ps1", "hash"),
-        ("highlights.scm", "dune"),
+        ("highlights.scm", "scheme"),
     ],
 )
 def test_language_for(name, language):
