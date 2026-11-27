@@ -172,6 +172,23 @@ def _skip_regex(src: str, i: int) -> int:
     return i + 1
 
 
+@dataclass(frozen=True)
+class _CStyle:
+    """The options of one C-family dialect, which ``lex_c`` passes down to ``_lex_c_from``."""
+
+    block_comments: bool
+    line_comments: bool
+    char_literals: bool
+    js: bool
+    jsx: bool
+
+
+# A JSX element opens with ``<>`` or with a tag name that a space, ``/``,
+# ``>`` or ``{`` follows. A TypeScript type parameter list such as
+# ``<T,>`` or ``<T extends U>`` opens none.
+JSX_START_RE = re.compile(r"<(?:>|[A-Za-z_$][\w$.:-]*(?=[\s/>{])(?!\s*,)(?!\s+extends\b))")
+
+
 def lex_c(
     src: str,
     *,
@@ -179,20 +196,35 @@ def lex_c(
     line_comments: bool = True,
     char_literals: bool = True,
     js: bool = False,
+    jsx: bool = False,
 ) -> list[RawComment]:
     """Lex C and C++ (``block_comments``), Zane (line comments only), JavaScript (``js``) or CSS.
 
     JavaScript and TypeScript quote strings with ``'`` as well as ``"``, and
     template literals in backticks span lines. The expression in a
     template's ``${ }`` substitution is code, so the lexer reads its
-    comments. CSS (``js`` without ``line_comments``) has only ``/* */``
-    comments, so ``//`` in ``url(https://...)`` starts none.
+    comments. With ``jsx``, a JSX element skips its text and attribute
+    strings, and the lexer reads the comments in its ``{ }`` expressions.
+    CSS (``js`` without ``line_comments``) has only ``/* */`` comments, so
+    ``//`` in ``url(https://...)`` starts none.
     """
     s = Source(src)
     out: list[RawComment] = []
-    i, n = 0, len(src)
+    _lex_c_from(src, 0, s, out, _CStyle(block_comments, line_comments, char_literals, js, jsx), close_brace=False)
+    return out
+
+
+def _lex_c_from(src: str, i: int, s: Source, out: list[RawComment], o: _CStyle, *, close_brace: bool) -> int:
+    """Lex C-family code from ``i`` and append its comments to ``out``.
+
+    With ``close_brace``, the lexer reads one JSX or Astro expression and
+    returns the offset after the ``}`` that closes it. Otherwise it reads
+    to the end of ``src``.
+    """
+    n = len(src)
     # One brace depth per open template substitution, innermost last.
     subs: list[int] = []
+    depth = 0
     while i < n:
         ch = src[i]
         if subs and ch == "{":
@@ -207,33 +239,39 @@ def lex_c(
                 i, inner = _scan_template(src, i + 1)
                 if inner:
                     subs.append(0)
+        elif close_brace and ch == "{":
+            depth += 1
+            i += 1
+        elif close_brace and ch == "}":
+            if not depth:
+                return i + 1
+            depth -= 1
+            i += 1
         elif ch == '"':
             i = _skip_string(src, i, '"', multiline=False)
-        elif js and ch == "'" and i and (src[i - 1].isalnum() or src[i - 1] == "_"):
-            # No JavaScript string opens right after a word, so this is an
-            # apostrophe in JSX text, such as "don't".
-            i += 1
-        elif js and ch == "'":
+        elif o.js and ch == "'":
             i = _skip_string(src, i, "'", multiline=False)
-        elif js and ch == "/" and not src.startswith(("//", "/*"), i) and _regex_allowed(src, i):
+        elif o.js and ch == "/" and not src.startswith(("//", "/*"), i) and _regex_allowed(src, i):
             i = _skip_regex(src, i)
-        elif js and ch == "`":
+        elif o.jsx and ch == "<" and JSX_START_RE.match(src, i) and _regex_allowed(src, i):
+            i = _skip_jsx(src, i, s, out, o)
+        elif o.js and ch == "`":
             i, inner = _scan_template(src, i + 1)
             if inner:
                 subs.append(0)
-        elif js and ch in "uULR":
+        elif o.js and ch in "uULR":
             i += 1
-        elif ch == "'" and char_literals:
+        elif ch == "'" and o.char_literals:
             m = C_CHAR_RE.match(src, i)
             i = m.end() if m else i + 1
-        elif ch in "uULR" and char_literals and (i == 0 or not (src[i - 1].isalnum() or src[i - 1] == "_")):
+        elif ch in "uULR" and o.char_literals and (i == 0 or not (src[i - 1].isalnum() or src[i - 1] == "_")):
             m = CPP_RAW_RE.match(src, i)
             if m:
                 close = src.find(")" + m.group(1) + '"', m.end())
                 i = n if close < 0 else close + len(m.group(1)) + 2
             else:
                 i += 1
-        elif line_comments and src.startswith("//", i):
+        elif o.line_comments and src.startswith("//", i):
             j = i
             while j < n and src[j] == "/":
                 j += 1
@@ -243,7 +281,7 @@ def lex_c(
             end = n if end < 0 else end
             out.append(RawComment("line", j, end, s.own_line(i), "/"))
             i = end
-        elif block_comments and src.startswith("/*", i):
+        elif o.block_comments and src.startswith("/*", i):
             j = i + 2
             while j < n and src[j] in "*!":
                 j += 1
@@ -255,7 +293,48 @@ def lex_c(
             i = n if close < 0 else close + 2
         else:
             i += 1
-    return out
+    return n
+
+
+def _skip_jsx(src: str, i: int, s: Source, out: list[RawComment], o: _CStyle) -> int:
+    """Return the offset after the JSX element that opens at ``i``, appending the comments of its expressions.
+
+    The text between tags is prose for the reader of the page, not a
+    comment, so an apostrophe or a quote in it opens no string.
+    """
+    n, open_elements = len(src), 0
+    while i < n:
+        if src[i] == "<":
+            closing = src.startswith("</", i)
+            i, self_closing = _skip_jsx_tag(src, i, s, out, o)
+            if closing:
+                open_elements -= 1
+            elif not self_closing:
+                open_elements += 1
+            if open_elements <= 0:
+                return i
+        elif src[i] == "{":
+            i = _lex_c_from(src, i + 1, s, out, o, close_brace=True)
+        else:
+            i += 1
+    return n
+
+
+def _skip_jsx_tag(src: str, i: int, s: Source, out: list[RawComment], o: _CStyle) -> tuple[int, bool]:
+    """Return the offset after the JSX tag at ``i`` and whether the tag closes itself (``<br />``)."""
+    j, n = i + 1, len(src)
+    while j < n:
+        ch = src[j]
+        if ch in "\"'":
+            close = src.find(ch, j + 1)
+            j = n if close < 0 else close + 1
+        elif ch == "{":
+            j = _lex_c_from(src, j + 1, s, out, o, close_brace=True)
+        elif ch == ">":
+            return j + 1, src[j - 1] == "/"
+        else:
+            j += 1
+    return n, False
 
 
 OCAML_CHAR_RE = re.compile(
@@ -667,26 +746,7 @@ def _shifted(comments: list[RawComment], offset: int) -> list[RawComment]:
     return comments
 
 
-def _js_expression_end(src: str, i: int) -> int:
-    """Return the offset after the ``}`` that closes the JavaScript expression opened by the ``{`` at ``i``."""
-    j, n, depth = i + 1, len(src), 1
-    while j < n:
-        ch = src[j]
-        if ch in "\"'`":
-            j = _skip_string(src, j, ch, multiline=ch == "`")
-            continue
-        if src.startswith("/*", j):
-            close = src.find("*/", j + 2)
-            j = n if close < 0 else close + 2
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if not depth:
-                return j + 1
-        j += 1
-    return n
+ASTRO_EXPRESSION = _CStyle(block_comments=True, line_comments=True, char_literals=True, js=True, jsx=True)
 
 
 def lex_astro(src: str) -> list[RawComment]:
@@ -696,8 +756,8 @@ def lex_astro(src: str) -> list[RawComment]:
     element hold JavaScript, TypeScript or CSS, which the JavaScript lexer
     reads, with ``/* */`` comments alone in CSS. The template between them
     holds HTML comments (``<!-- -->``) and ``{ }`` expressions, which the
-    JavaScript lexer reads, so a comment inside one is found and a quoted
-    ``/*`` is not.
+    JavaScript lexer reads with JSX, so a comment inside one is found and a
+    quoted ``/*`` or the text of a nested element is not.
     """
     s = Source(src)
     out: list[RawComment] = []
@@ -714,13 +774,7 @@ def lex_astro(src: str) -> list[RawComment]:
             out.append(RawComment("block", i + 4, end, s.own_line(i)))
             i = n if close < 0 else close + 3
         elif src[i] == "{":
-            end = _js_expression_end(src, i)
-            body = _shifted(lex_c(src[i + 1 : end - 1], js=True), i + 1)
-            for c in body:
-                marker = max(src.rfind("//", i, c.start), src.rfind("/*", i, c.start))
-                c.own_line = s.own_line(marker)
-            out.extend(body)
-            i = end
+            i = _lex_c_from(src, i + 1, s, out, ASTRO_EXPRESSION, close_brace=True)
         elif src[i] == "<" and ASTRO_RAW_RE.match(src, i):
             r = ASTRO_RAW_RE.match(src, i)
             css = r.group(1).lower() == "style"
@@ -943,6 +997,8 @@ def extract_comments(src: str, language: str) -> Extracted:
     if language == "scheme":
         return comments_to_segments(src, lex_dune(src, scheme=True), COMMENT)
     if language == "javascript":
+        return comments_to_segments(src, lex_c(src, js=True, jsx=True), COMMENT, tags=True)
+    if language == "typescript":
         return comments_to_segments(src, lex_c(src, js=True), COMMENT, tags=True)
     if language == "lua":
         return comments_to_segments(src, lex_lua(src), COMMENT, tags=True)
