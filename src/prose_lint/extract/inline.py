@@ -25,7 +25,16 @@ FOOTNOTE_REF_RE = re.compile(r"\[\^[^\]]+\]")
 SHORT_REF_RE = re.compile(r"\[([^\]^][^\]]*)\](?![(\[:])")
 AUTOLINK_RE = re.compile(r"<(?:https?|mailto|ftp):[^>\s]*>")
 URL_RE = re.compile(r"\b(?:https?|ftp)://[^\s<>()\[\]`]+[^\s<>()\[\]`.,;:!?'\"]")
-HTML_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>")
+# Only known HTML elements count as tags, so a generic type such as
+# ``Option<T>`` stays in the sentence; GENERIC_RE turns it into a code token.
+HTML_TAGS = (
+    "a abbr b blockquote br code dd del details div dl dt em h1 h2 h3 h4 h5 h6 hr i img ins kbd li "
+    "mark ol p picture pre q s samp small source span strong sub summary sup table tbody td th thead "
+    "tr tt u ul var"
+)
+_TAG_NAMES = "|".join(HTML_TAGS.split())
+HTML_TAG_RE = re.compile(rf"(?<![\w<])<(?:{_TAG_NAMES})\b(?:\s[^<>]*)?/?>|</(?:{_TAG_NAMES})\s*>", re.I)
+GENERIC_RE = re.compile(r"\b[A-Za-z_][\w.:]*<[^<>\n]*(?:<[^<>\n]*>[^<>\n]*)*>")
 EMPHASIS_RE = re.compile(r"\*\*|\*|~~|(?<![\w\\])__?|__?(?!\w)")
 ESCAPE_RE = re.compile(r"\\([!-/:-@\[-`{-~])")
 # Text in double quotes is a mention, as in 'the verb "say"', so it becomes a
@@ -94,6 +103,9 @@ def clean_inline(pt: PText, dialect: str = MARKDOWN) -> PText:
         QUOTE_RE, lambda m: None if _inside_code(cur, m) else code_token(cur, m, 1 if m.group(1) is not None else 2)
     )
     pt = pt.replace(AUTOLINK_RE, lambda m: ("URL", True))
+    pt = pt.replace(HTML_TAG_RE, lambda m: ("", False))
+    cur = pt
+    pt = cur.replace(GENERIC_RE, lambda m: None if _inside_code(cur, m) else (CODE_WORD, True))
     pt = pt.replace(URL_RE, lambda m: ("URL", True))
     for pattern in (IMAGE_RE, LINK_RE, REF_LINK_RE):
         cur = pt

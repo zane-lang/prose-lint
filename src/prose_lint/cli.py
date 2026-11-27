@@ -42,12 +42,19 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def iter_files(paths: list[str], cfg, language: str | None):
-    """Yield ``(display_path, file_path, language)`` for each file to check, in a fixed order."""
+def iter_files(paths: list[str], cfg, language: str | None, errors: list[str]):
+    """Yield ``(display_path, file_path, language)`` for each file to check, in a fixed order.
+
+    A directory that cannot be read adds a message to ``errors``.
+    """
+
+    def walk_error(e: OSError) -> None:
+        errors.append(f"{_display(Path(e.filename))}: {e.strerror}")
+
     for raw in paths:
         p = Path(raw)
         if p.is_dir():
-            for dirpath, dirnames, filenames in os.walk(p):
+            for dirpath, dirnames, filenames in os.walk(p, onerror=walk_error):
                 dirnames[:] = sorted(
                     d
                     for d in dirnames
@@ -58,7 +65,7 @@ def iter_files(paths: list[str], cfg, language: str | None):
                     lang = language or language_for(name, cfg.languages)
                     if lang and not cfg.is_excluded(fp):
                         yield _display(fp), fp, lang
-        else:
+        elif not cfg.is_excluded(p):
             lang = language or language_for(p.name, cfg.languages)
             yield _display(p), p, lang
 
@@ -111,7 +118,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"prose-lint: {raw}: no such file or directory", file=sys.stderr)
             status = EXIT_USAGE
             continue
-        for display, fp, lang in iter_files([raw], cfg, args.language):
+        walk_errors: list[str] = []
+        for display, fp, lang in iter_files([raw], cfg, args.language, walk_errors):
             if lang is None:
                 print(f"prose-lint: {display}: unknown file type; pass --language", file=sys.stderr)
                 status = EXIT_USAGE
@@ -124,6 +132,9 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             findings += lint_text(text, lang, display, rules)
             files += 1
+        for msg in walk_errors:
+            print(f"prose-lint: {msg}", file=sys.stderr)
+            status = EXIT_USAGE
 
     findings.sort(key=lambda f: (f.path, f.line, f.column, f.rule, f.message))
     errors = sum(1 for f in findings if f.severity == ERROR)

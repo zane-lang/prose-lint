@@ -97,7 +97,7 @@ def lex_c(src: str, *, block_comments: bool = True, char_literals: bool = True) 
         elif ch == "'" and char_literals:
             m = C_CHAR_RE.match(src, i)
             i = m.end() if m else i + 1
-        elif ch == "R" and char_literals and (i == 0 or not (src[i - 1].isalnum() or src[i - 1] == "_")):
+        elif ch in "uULR" and char_literals and (i == 0 or not (src[i - 1].isalnum() or src[i - 1] == "_")):
             m = CPP_RAW_RE.match(src, i)
             if m:
                 close = src.find(")" + m.group(1) + '"', m.end())
@@ -196,9 +196,11 @@ def lex_hash(src: str, *, toml: bool = False) -> list[RawComment]:
         i = n if i < 0 else i
     while i < n:
         ch = src[i]
-        if toml and src.startswith(('"""', "'''"), i):
-            close = src.find(src[i : i + 3], i + 3)
+        if toml and src.startswith("'''", i):
+            close = src.find("'''", i + 3)
             i = n if close < 0 else close + 3
+        elif toml and src.startswith('"""', i):
+            i = _skip_toml_basic(src, i + 3)
         elif ch in "\"'":
             i = _skip_string(src, i, ch, multiline=False) if ch == '"' else _skip_single(src, i)
         elif ch == "#" and (i == 0 or src[i - 1].isspace()):
@@ -212,6 +214,22 @@ def lex_hash(src: str, *, toml: bool = False) -> list[RawComment]:
         else:
             i += 1
     return out
+
+
+def _skip_toml_basic(src: str, j: int) -> int:
+    """Return the offset after a TOML multi-line basic string whose content starts at ``j``."""
+    while j < len(src):
+        if src[j] == "\\":
+            j += 2
+        elif src.startswith('"""', j):
+            # A closing delimiter may carry up to two extra quotes: """"".
+            j += 3
+            while j < len(src) and src[j] == '"':
+                j += 1
+            return j
+        else:
+            j += 1
+    return j
 
 
 def _skip_single(src: str, i: int) -> int:
@@ -267,7 +285,7 @@ def lex_python(src: str) -> list[RawComment]:
         while j < len(src) and src[j] == "#":
             j += 1
         out.append(RawComment("line", j, start + len(tok.string), s.own_line(start), "#"))
-    out.extend(_python_docstrings(src, s))
+    out.extend(_python_docstrings(src, s, tokens))
     out.sort(key=lambda c: c.start)
     return out
 
@@ -275,7 +293,7 @@ def lex_python(src: str) -> list[RawComment]:
 STRING_PREFIX_RE = re.compile(r"[rRuUbBfF]*(\"\"\"|'''|\"|')")
 
 
-def _python_docstrings(src: str, s: Source) -> list[RawComment]:
+def _python_docstrings(src: str, s: Source, tokens) -> list[RawComment]:
     try:
         tree = ast.parse(src)
     except SyntaxError:
@@ -292,11 +310,19 @@ def _python_docstrings(src: str, s: Source) -> list[RawComment]:
             continue
         start = _offset(src, s, value.lineno, value.col_offset)
         end = _offset(src, s, value.end_lineno, value.end_col_offset)
-        m = STRING_PREFIX_RE.match(src, start)
-        if not m:
-            continue
-        quote = m.group(1)
-        out.append(RawComment("docstring", m.end(), end - len(quote), s.own_line(start)))
+        # Adjacent literals ("""a""" "b") form one docstring; each literal
+        # contributes its own content.
+        for tok in tokens:
+            if tok.type != tokenize.STRING:
+                continue
+            tstart = s.line_starts[tok.start[0] - 1] + tok.start[1]
+            if not start <= tstart < end:
+                continue
+            m = STRING_PREFIX_RE.match(src, tstart)
+            if not m:
+                continue
+            quote = m.group(1)
+            out.append(RawComment("docstring", m.end(), tstart + len(tok.string) - len(quote), s.own_line(tstart)))
     return out
 
 

@@ -31,7 +31,7 @@ class PlaceholderNoun(Rule):
             low = tok.lower_
             lemma = tok.lemma_.lower()
 
-            if low == "what" and tok.tag_ == "WP" and not question and self._vague(tok):
+            if low == "what" and tok.tag_ == "WP" and not (question and _asks(tok)) and self._vague(tok):
                 clause = _clause(tok)
                 yield Hit(
                     clause.start_char,
@@ -70,9 +70,29 @@ class PlaceholderNoun(Rule):
     def _vague(self, what) -> bool:
         """Report whether the verb of the free relative that ``what`` opens is vague."""
         verb = what.head
-        if verb.i < what.i or verb.pos_ not in ("VERB", "AUX"):
-            return False
-        return verb.lemma_.lower() in self.vague_verbs
+        if verb.i > what.i and verb.pos_ in ("VERB", "AUX") and verb.lemma_.lower() in self.vague_verbs:
+            return True
+        # The parser sometimes attaches "what" to a later verb ("Is what the
+        # step does documented?"). A finite "does" that no base-form verb
+        # follows is then the clause's own verb.
+        doc = what.doc
+        for t in doc[what.i + 1 : what.sent.end]:
+            if t.pos_ in ("VERB", "AUX"):
+                if t.lemma_ != "do" or t.tag_ not in ("VBZ", "VBD", "VBP"):
+                    return False
+                nxt = next((u for u in doc[t.i + 1 : what.sent.end] if u.pos_ not in ("PART", "ADV")), None)
+                return nxt is None or nxt.tag_ != "VB"
+        return False
+
+
+def _asks(what) -> bool:
+    """Report whether ``what`` is the question word of its sentence ("What does the flag change?").
+
+    An embedded clause in a question still counts as a free relative: "Is what
+    the step does documented?"
+    """
+    first = next((t for t in what.sent if not t.is_punct), None)
+    return what == first or what.head.dep_ == "ROOT" or what.head == what.sent.root
 
 
 def _clause(what):

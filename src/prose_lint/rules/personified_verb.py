@@ -15,7 +15,19 @@ from .words import (
     THING_PRONOUNS,
 )
 
-FILE_NAME_RE = re.compile(r"\.[A-Za-z][A-Za-z0-9]{0,5}$")
+# A subject that ends in one of these extensions is a file ("fixture_pairing.ml
+# says"). A dotted name with any other ending, such as ``List.map``, is a
+# function or a module path, and a function may act.
+FILE_EXTENSIONS = frozenset(
+    """
+    md markdown rst txt ml mli mll mly c h cc cpp cxx hh hpp hxx zn py pyi sh bash
+    zsh yml yaml toml json lock cfg ini xml html css js ts csv mk cmake opam coda
+    """.split()
+)
+FILE_NAME_RE = re.compile(r"\.([A-Za-z][A-Za-z0-9]*)$")
+# "they" and "them" stand for people, values or files; the nearest plural noun
+# before them decides which.
+AMBIGUOUS_PRONOUNS = frozenset(("they", "them"))
 
 
 class PersonifiedVerb(Rule):
@@ -52,14 +64,19 @@ class PersonifiedVerb(Rule):
         """Return the subject phrase, or ``None`` when the subject is a person or a program."""
         phrase = subj.doc[subj.left_edge.i : subj.i + 1].text
         if is_code(seg, subj):
-            return phrase if FILE_NAME_RE.search(subj.text) else None
+            return phrase if _is_file_name(subj.text) else None
         low = subj.lower_
+        if low in AMBIGUOUS_PRONOUNS:
+            antecedent = _plural_antecedent(subj)
+            if antecedent is None or self._thing(antecedent, seg) is None:
+                return None
+            return f"{phrase} ({antecedent.text})"
         if low in AGENT_PRONOUNS:
             return None
         if low in THING_PRONOUNS:
             return phrase
         if subj.pos_ == "PROPN":
-            return phrase if FILE_NAME_RE.search(subj.text) else None
+            return phrase if _is_file_name(subj.text) else None
         if subj.pos_ != "NOUN":
             return None
         if subj.lemma_.lower() in self.agents or low in self.agents:
@@ -74,9 +91,22 @@ def _fixed_phrase(verb) -> bool:
     """
     if verb.lemma_ == "say":
         prev = verb.nbor(-1) if verb.i > 0 else None
-        if prev is not None and prev.lower_ == "to":
+        if prev is not None and prev.lower_ == "to" and (verb.head.lemma_ == "be" or verb.head.pos_ == "ADJ"):
             return True
     return False
+
+
+def _is_file_name(text: str) -> bool:
+    m = FILE_NAME_RE.search(text)
+    return bool(m) and m.group(1).lower() in FILE_EXTENSIONS
+
+
+def _plural_antecedent(pron):
+    """Return the nearest plural noun before ``pron`` in the same segment, or ``None``."""
+    for t in reversed(pron.doc[: pron.i]):
+        if t.pos_ in ("NOUN", "PROPN") and t.tag_ in ("NNS", "NNPS") and t.dep_ != "compound":
+            return t
+    return None
 
 
 def _subject(verb):

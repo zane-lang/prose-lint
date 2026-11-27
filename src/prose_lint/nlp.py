@@ -25,13 +25,14 @@ def load():
     if _nlp is None:
         import spacy
 
-        _nlp = spacy.load(MODEL, exclude=["ner"])
-        version = _nlp.meta.get("version")
+        nlp = spacy.load(MODEL, exclude=["ner"])
+        version = nlp.meta.get("version")
         if version != MODEL_VERSION:
             raise RuntimeError(
                 f"prose-lint needs {MODEL} {MODEL_VERSION}, but {version} is installed; "
                 "results would differ from other installations"
             )
+        _nlp = nlp
     return _nlp
 
 

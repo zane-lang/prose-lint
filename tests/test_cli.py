@@ -115,3 +115,42 @@ def test_deterministic_across_processes(tmp_path):
     a = subprocess.run(cmd + files, capture_output=True, text=True, check=False).stdout
     b = subprocess.run(cmd + files[::-1], capture_output=True, text=True, check=False).stdout
     assert a and a == b
+
+
+def test_explicit_file_respects_exclude(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path, "vendor/x.md", BAD)
+    write(tmp_path, "prose-lint.toml", 'exclude = ["vendor"]\n')
+    assert main(["vendor/x.md"]) == 0
+
+
+def test_glob_character_class(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path, "docs/generated/3-old/a.md", BAD)
+    write(tmp_path, "docs/keep.md", GOOD)
+    write(tmp_path, "prose-lint.toml", 'exclude = ["docs/generated/[0-9]*/**"]\n')
+    assert main(["docs"]) == 0
+
+
+def test_pyproject_non_table(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path, "a.md", GOOD)
+    write(tmp_path, "pyproject.toml", '[tool]\nprose-lint = []\n')
+    assert main(["--config", "pyproject.toml", "a.md"]) == 2
+    assert "must be a table" in capsys.readouterr().err
+
+
+def test_unreadable_directory(tmp_path, monkeypatch, capsys):
+    import prose_lint.cli as cli
+
+    monkeypatch.chdir(tmp_path)
+    write(tmp_path, "docs/a.md", GOOD)
+    real_walk = cli.os.walk
+
+    def walk(top, onerror=None):
+        onerror(PermissionError(13, "Permission denied", str(Path(top) / "locked")))
+        yield from real_walk(top)
+
+    monkeypatch.setattr(cli.os, "walk", walk)
+    assert main(["--no-config", "docs"]) == 2
+    assert "Permission denied" in capsys.readouterr().err

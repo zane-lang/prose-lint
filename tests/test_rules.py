@@ -13,6 +13,9 @@ BAD = [
     ("The flag decides the target and tells the linker where to look.", "personified-verb"),
     ("`fixture_pairing.ml` says which fixture each golden file uses.", "personified-verb"),
     ("Let the type decide the layout.", "personified-verb"),
+    ("The flag wants to say which target to use.", "personified-verb"),
+    ("The values exist, and they decide the layout.", "personified-verb"),
+    ("`guide.markdown` says which page comes first.", "personified-verb"),
     # placeholder-noun
     ("The case of a name says what it is.", "placeholder-noun"),
     ("What the step does is documented below.", "placeholder-noun"),
@@ -21,6 +24,7 @@ BAD = [
     ("There is a way to skip the check.", "placeholder-noun"),
     ("Something calls the hook twice.", "placeholder-noun"),
     ("Pick the one that matches the target.", "placeholder-noun"),
+    ("Is what the step does documented below?", "placeholder-noun"),
     ("The log shows what happens next.", "placeholder-noun"),
     ("The docs explain what the flag means for the build.", "placeholder-noun"),
     # self-reference
@@ -33,6 +37,8 @@ BAD = [
     ("How the parser recovers is described in recovery.md.", "stale-ending"),
     ("The build supports C, OCaml, Python and so on.", "stale-ending"),
     ("The lexer reads numbers, strings, etc.", "stale-ending"),
+    ("Where the cache is stored is config.yaml.", "stale-ending"),
+    ("Which fixture each golden file is for is `fixture_pairing.ml`.", "stale-ending"),
 ]
 
 GOOD = [
@@ -59,6 +65,10 @@ GOOD = [
     "The reach of the closure is the reach of what it captures.",
     "A variadic C function is reached the same way.",
     "A project wants a stable API, and the package decides its own version.",
+    "Users read the log, and they decide which warning to fix first.",
+    "`List.map` decides the order of the calls.",
+    "Needless to say, the cache is empty.",
+    "When the cache is warm the build is fast.",
     'Write "the element type" instead of "the thing".',
     "The phrase \u201cwhat it is\u201d is a free relative clause.",
 ]
@@ -84,3 +94,8 @@ def test_finding_position_points_at_verb(lint):
 def test_headings_skip_sentence_shape_rules(lint):
     """A heading is a fragment: placeholder-noun reads it, self-reference does not."""
     assert {f.rule for f in lint("# The case of a name says what it is\n")} == {"placeholder-noun", "personified-verb"}
+
+
+def test_pseudo_cleft_advice(lint):
+    (f,) = [f for f in lint("What the method does is return the cached value.") if f.rule == "stale-ending"]
+    assert "state the action directly" in f.message

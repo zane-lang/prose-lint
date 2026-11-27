@@ -16,7 +16,7 @@ golden:
 
 # Check this repository's own prose.
 prose:
-    uv run --frozen prose-lint README.md justfile pyproject.toml src tests/conftest.py tests/test_cli.py tests/test_golden.py
+    uv run --frozen prose-lint README.md justfile pyproject.toml src tests/conftest.py tests/test_cli.py tests/test_golden.py tests/test_rules.py
 
 # Update uv.lock and the hashed requirements file for pip users.
 lock:

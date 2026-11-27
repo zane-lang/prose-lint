@@ -12,7 +12,10 @@ from __future__ import annotations
 from ..segment import PARAGRAPH, Segment
 from .base import WARN, Hit, Rule, is_code
 
-WH_OPENERS = frozenset("what which whether how who why".split())
+WH_OPENERS = frozenset("what which whether how who why where when".split())
+# "When" and "where" also open adverbial clauses ("When the cache is warm the
+# build is fast"), so for them the final "is" must have no subject of its own.
+ADVERBIAL_OPENERS = frozenset(("where", "when"))
 # The longest tail after the final "is" that still counts as a bare
 # complement, such as "fixture_pairing.ml" or "documented below".
 MAX_TAIL = 4
@@ -47,9 +50,9 @@ class StaleEnding(Rule):
     def check(self, sent, seg: Segment):
         toks = [t for t in sent if not t.is_space]
         words = [t for t in toks if not (t.is_punct and t.text != "etc.")]
-        if not words or is_code(seg, words[-1]):
+        if not words:
             return
-        hit = self._filler(words)
+        hit = None if is_code(seg, words[-1]) else self._filler(words)
         if hit:
             yield hit
             return
@@ -86,12 +89,19 @@ class StaleEnding(Rule):
         # "Whether the cache is warm, the build is slow" opens with an adverbial clause.
         if any(t.text in (",", ":", ";") for t in toks if first.i < t.i < be.i):
             return None
+        if first.lower_ in ADVERBIAL_OPENERS:
+            prev = be.doc[be.i - 1]
+            if prev.dep_ in ("nsubj", "nsubjpass", "expl") and prev.head in (be, be.head):
+                return None
         tail = [t for t in words if t.i > be.i]
         if not tail or len(tail) > MAX_TAIL:
             return None
         opener = first.doc[first.i : be.i].text
         complement = first.doc[tail[0].i : tail[-1].i + 1].text
-        if any(t.pos_ in ("NOUN", "PROPN", "PRON") or is_code(seg, t) for t in tail) and not any(
+        if tail[0].pos_ == "VERB" and tail[0].tag_ in ("VB", "VBP", "VBZ"):
+            # "What the method does is return the cached value."
+            advice = "state the action directly, with the actor as the subject"
+        elif any(t.pos_ in ("NOUN", "PROPN", "PRON") or is_code(seg, t) for t in tail) and not any(
             t.tag_ == "VBN" for t in tail
         ):
             advice = f'make "{complement}" the subject of an action verb'

@@ -38,7 +38,7 @@ docs/build.md:12:10: personified-verb: "The text" is not a person or a program a
 ```
 
 The fields are path, line, column, rule id and message. A finding from a rule
-with severity `warn` ends with `(warning)`. A summary goes to standard error.
+with severity `warn` ends with `(warning)`. When there are findings, a summary goes to standard error.
 
 | Option | Effect |
 |---|---|
@@ -133,7 +133,7 @@ mentioned above".
 | `c` | `.c`, `.h`, `.cc`, `.cpp`, `.cxx`, `.hh`, `.hpp`, `.hxx` | `//` and `/* */` comments |
 | `zane` | `.zn` | `//` and `///` comments |
 | `python` | `.py`, `.pyi` | `#` comments and docstrings |
-| `hash` | `.sh`, `.yml`, `.yaml`, `.mk`, `.cmake`, `.opam`, `Makefile`, `justfile`, `Dockerfile`, `CMakeLists.txt` | `#` comments |
+| `hash` | `.sh`, `.bash`, `.zsh`, `.yml`, `.yaml`, `.mk`, `.cmake`, `.opam`, `Makefile`, `GNUmakefile`, `makefile`, `justfile`, `Justfile`, `.justfile`, `Dockerfile`, `CMakeLists.txt` | `#` comments |
 | `toml` | `.toml` | `#` comments |
 | `dune` | `dune`, `dune-project`, `dune-workspace` | `;` and `#| |#` comments |
 

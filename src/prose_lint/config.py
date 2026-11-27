@@ -81,6 +81,14 @@ def _glob_regex(pattern: str) -> re.Pattern[str]:
         elif p[i] == "?":
             out.append("[^/]")
             i += 1
+        elif p[i] == "[" and "]" in p[i + 2 :]:
+            # A character class: [abc], [a-z], [!abc].
+            close = p.index("]", i + 2)
+            body = p[i + 1 : close]
+            neg = body.startswith(("!", "^"))
+            body = body[1:] if neg else body
+            out.append("[" + ("^" if neg else "") + body.replace("\\", "\\\\") + "]")
+            i = close + 1
         else:
             out.append(re.escape(p[i]))
             i += 1
@@ -98,7 +106,8 @@ def find_config(start: Path) -> Path | None:
                 data = tomllib.loads(pp.read_text(encoding="utf-8"))
             except tomllib.TOMLDecodeError:
                 continue
-            if "prose-lint" in data.get("tool", {}):
+            tool = data.get("tool", {})
+            if isinstance(tool, dict) and "prose-lint" in tool:
                 return pp
     return None
 
@@ -111,7 +120,12 @@ def load_config(path: Path | None) -> Config:
     except (OSError, tomllib.TOMLDecodeError) as e:
         raise ConfigError(f"{path}: {e}") from e
     if path.name == "pyproject.toml":
-        data = data.get("tool", {}).get("prose-lint", {})
+        tool = data.get("tool", {})
+        if not isinstance(tool, dict):
+            raise ConfigError(f"{path}: 'tool' must be a table")
+        data = tool.get("prose-lint", {})
+        if not isinstance(data, dict):
+            raise ConfigError(f"{path}: 'tool.prose-lint' must be a table")
     return parse_config(data, path)
 
 

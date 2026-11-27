@@ -39,11 +39,12 @@ AGENT_NOUNS = frozenset(
     """.split()
 )
 
-# Pronouns that refer to people.
+# Pronouns that refer to people. personified-verb resolves "they" and "them"
+# from the nearest plural noun, because both also refer to values and files.
 AGENT_PRONOUNS = frozenset(
     """
-    i we you he she they one someone somebody everyone everybody anyone anybody
-    nobody who whoever us me him her them
+    i we you he she one someone somebody everyone everybody anyone anybody
+    nobody who whoever us me him her
     """.split()
 )
 

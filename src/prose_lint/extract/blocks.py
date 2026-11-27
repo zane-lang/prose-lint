@@ -11,8 +11,8 @@ from __future__ import annotations
 import re
 
 from ..ptext import PText, join_lines
-from ..segment import HEADING, PARAGRAPH, TABLE_CELL, Extracted, Segment, find_directives
-from .inline import MARKDOWN, clean_inline
+from ..segment import DIRECTIVE_RE, HEADING, PARAGRAPH, TABLE_CELL, Extracted, Segment, find_directives
+from .inline import CODE_SPAN_RE, MARKDOWN, clean_inline
 
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 ATX_RE = re.compile(r"^ {0,3}(#{1,6})(?:\s+|$)")
@@ -62,6 +62,7 @@ def parse_blocks(
     raw_html: str | None = None
     in_comment = False
     in_list = False
+    list_indent = 0
     in_table = False
     table_block = 0
     prev_blank = True
@@ -84,9 +85,11 @@ def parse_blocks(
         line = lines[i]
         lineno = line.pos_at(0)[0] if line.pos else None
         i += 1
+        # Block quote markers go first, so a quoted fence or table is
+        # recognized like an unquoted one.
+        while QUOTE_RE.match(line.text):
+            line = _lstrip(line, QUOTE_RE.match(line.text).end())
         text = line.text
-        if lineno is not None:
-            out.directives.extend(find_directives(text, lineno))
 
         if fence is not None:
             stripped = text.strip()
@@ -97,6 +100,8 @@ def parse_blocks(
             if re.search(rf"</{raw_html}\s*>", text, re.I):
                 raw_html = None
             continue
+        if lineno is not None:
+            out.directives.extend(_directives(text, lineno, dialect, in_comment))
         if in_comment:
             m = HTML_COMMENT_CLOSE_RE.search(text)
             if not m:
@@ -138,7 +143,10 @@ def parse_blocks(
         indent = len(text) - len(text.lstrip(" "))
         if text.startswith("\t"):
             indent = 4
-        if indented_code and indent >= 4 and prev_blank and not in_list and not para:
+        # Indented code: four columns past the enclosing list item's content,
+        # or past the margin outside a list, after a blank line.
+        code_indent = list_indent + 4 if in_list else 4
+        if indented_code and indent >= code_indent and prev_blank and not para:
             continue
 
         if in_table:
@@ -152,21 +160,14 @@ def parse_blocks(
             in_table = True
             continue
 
-        while QUOTE_RE.match(line.text):
-            line = _lstrip(line, QUOTE_RE.match(line.text).end())
-        text = line.text
-        if not text.strip():
-            flush()
-            prev_blank = True
-            continue
-
-        if THEMATIC_RE.match(text):
-            flush()
-            prev_blank = True
-            continue
+        # A setext underline also matches the thematic break, so it goes first.
         m = SETEXT_RE.match(text)
         if m and para and not prev_blank:
             flush(HEADING)
+            prev_blank = True
+            continue
+        if THEMATIC_RE.match(text):
+            flush()
             prev_blank = True
             continue
         m = ATX_RE.match(text)
@@ -191,11 +192,12 @@ def parse_blocks(
         if m and (m.group(3) or m.end() == len(line.text)):
             flush()
             in_list = True
+            list_indent = len(m.group(1)) + len(m.group(2)) + max(1, min(len(m.group(3)), 4))
             line = _lstrip(line, m.end())
             if not line.text.strip():
                 prev_blank = False
                 continue
-        elif prev_blank and indent == 0:
+        elif prev_blank and indent < list_indent:
             in_list = False
 
         para.append(line)
@@ -203,6 +205,42 @@ def parse_blocks(
 
     flush()
     return out
+
+
+DIRECTIVE_MENTION_RE = re.compile(r"[`'\"\u201c]\s*$")
+
+
+def _directives(text: str, lineno: int, dialect: str, in_comment: bool):
+    """Return the suppression directives on one line.
+
+    In Markdown a directive counts only inside an HTML comment. In a code
+    comment it counts anywhere, unless a backtick or a quote opens right before
+    it, which marks a mention such as `prose-lint: ignore`.
+    """
+    if dialect != MARKDOWN:
+        return [
+            d
+            for d, m in _directive_matches(text, lineno)
+            if not DIRECTIVE_MENTION_RE.search(text[: m.start()])
+        ]
+    # Blank out code spans, so a directive quoted in inline code is a mention.
+    text = CODE_SPAN_RE.sub(lambda m: " " * len(m.group(0)), text)
+    found = []
+    pos = 0
+    if in_comment:
+        close = HTML_COMMENT_CLOSE_RE.search(text)
+        end = close.start() if close else len(text)
+        found += find_directives(text[:end], lineno)
+        pos = end
+    for m in re.finditer(r"<!--(.*?)(?:-->|$)", text[pos:]):
+        found += find_directives(m.group(1), lineno)
+    return found
+
+
+def _directive_matches(text: str, lineno: int):
+    for m in DIRECTIVE_RE.finditer(text):
+        for d in find_directives(m.group(0), lineno):
+            yield d, m
 
 
 def _emit(out: Extracted, lines: list[PText], kind: str, dialect: str, block: int) -> None:
@@ -223,13 +261,13 @@ def _emit_table_row(out: Extracted, line: PText, dialect: str, block: int) -> No
     if TABLE_DELIM_RE.match(text):
         return
     # Split on pipes that are not escaped and not inside a code span.
+    in_code = [False] * len(text)
+    for m in CODE_SPAN_RE.finditer(text):
+        in_code[m.start() : m.end()] = [True] * (m.end() - m.start())
     start = 0
-    in_code = False
     cells = []
     for j, ch in enumerate(text):
-        if ch == "`":
-            in_code = not in_code
-        elif ch == "|" and not in_code and (j == 0 or text[j - 1] != "\\"):
+        if ch == "|" and not in_code[j] and (j == 0 or text[j - 1] != "\\"):
             cells.append(line.slice(start, j))
             start = j + 1
     cells.append(line.slice(start, len(text)))
