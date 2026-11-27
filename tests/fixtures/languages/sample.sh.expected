@@ -1,0 +1,2 @@
+languages/sample.sh:2:12: personified-verb: "The flag" is not a person or a program and cannot "tell"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.sh:3:40: personified-verb: "The value" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
