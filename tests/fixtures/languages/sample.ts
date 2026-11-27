@@ -11,3 +11,6 @@ export function f(size: number): string {
   const c = `total: ${size /* The counter wants a reset. */ + 1}, ${`inner ${size}`} // not a comment`;
   return a + b + c;
 }
+const quote = /'/; // The value knows the size.
+const klass = /[/"]/g; // The option wants a list.
+const ratio = size / 2; // The ratio decides the scale.

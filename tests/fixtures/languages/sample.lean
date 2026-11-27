@@ -10,3 +10,5 @@ def c : Char := '-'
 /- Outer comment.
   /- The nested note wants a name. -/
   The parser reads each field. -/
+def «"» : Nat := 1
+-- The proof knows the answer.

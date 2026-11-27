@@ -5,3 +5,4 @@ languages/sample.lean:3:15: personified-verb: "The lemma" is not a person or a p
 languages/sample.lean:4:52: personified-verb: "The proof" is not a person or a program and cannot "know"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
 languages/sample.lean:11:22: personified-verb: "The nested note" is not a person or a program and cannot "want"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
 languages/sample.lean:11:28: placeholder-noun: "a name" is a placeholder; name the kind of name, such as "an identifier" or "a field name"
+languages/sample.lean:14:14: personified-verb: "The proof" is not a person or a program and cannot "know"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"

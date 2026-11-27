@@ -15,3 +15,6 @@ local function f(name)
   ]==]
   return s .. t .. u
 end
+local z = "one \z
+  -- not a comment"
+-- The flag decides the target.

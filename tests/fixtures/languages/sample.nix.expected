@@ -1,0 +1,3 @@
+languages/sample.nix:1:13: personified-verb: "The flake" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.nix:8:18: personified-verb: "The overlay" is not a person or a program and cannot "want"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.nix:8:24: placeholder-noun: "a name" is a placeholder; name the kind of name, such as "an identifier" or "a field name"

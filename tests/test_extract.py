@@ -48,7 +48,7 @@ def test_setext_heading_is_a_heading(lint):
         ("site.mjs", "javascript"),
         ("view.tsx", "javascript"),
         ("zane.cr", "hash"),
-        ("flake.nix", "hash"),
+        ("flake.nix", "nix"),
         ("install.ps1", "hash"),
         ("highlights.scm", "scheme"),
     ],
