@@ -1,2 +1,6 @@
 languages/sample.tsx:1:13: personified-verb: "The view" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
 languages/sample.tsx:2:48: personified-verb: "The page" is not a person or a program and cannot "want"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.tsx:3:40: personified-verb: "The text" is not a person or a program and cannot "want"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.tsx:6:51: personified-verb: "The key" is not a person or a program and cannot "know"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.tsx:9:16: personified-verb: "The list" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.tsx:10:53: personified-verb: "The helper" is not a person or a program and cannot "want"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"

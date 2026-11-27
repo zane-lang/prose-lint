@@ -137,7 +137,8 @@ mentioned above".
 | `toml` | `.toml` | `#` comments |
 | `dune` | `dune`, `dune-project`, `dune-workspace` | `;` and `#\| \|#` comments |
 | `scheme` | `.scm` | `;` comments and `#\| \|#` comments, nested |
-| `javascript` | `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx` | `//` and `/* */` comments, including those inside a template literal's `${ }` substitution; a regular-expression literal, or an apostrophe right after a word as in JSX text, starts no string |
+| `javascript` | `.js`, `.mjs`, `.cjs`, `.jsx`, `.tsx` | `//` and `/* */` comments, including those inside a template literal's `${ }` substitution and a JSX element's `{ }` expressions; JSX text and a regular-expression literal start no string |
+| `typescript` | `.ts`, `.mts`, `.cts` | The comments of `javascript`, without JSX, since `<T>value` in these files is a type assertion |
 | `nix` | `.nix` | `#` and `/* */` comments, outside `"..."` strings and `''...''` indented strings |
 | `lua` | `.lua` | `--` comments and `--[[ ]]` block comments, including long brackets with `=` signs such as `--[==[ ]==]` |
 | `lean` | `.lean` | `--` comments and `/- -/` comments, nested, with `/-- -/` and `/-! -/` doc comments |
