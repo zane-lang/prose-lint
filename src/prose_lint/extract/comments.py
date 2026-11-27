@@ -104,6 +104,7 @@ def _scan_template(src: str, j: int) -> tuple[int, bool]:
     return n, False
 
 
+CONDITION_KEYWORDS = {"if", "while", "for", "with"}
 REGEX_KEYWORDS = {"return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void", "throw", "yield", "await"}
 
 
@@ -111,20 +112,43 @@ def _regex_allowed(src: str, i: int) -> bool:
     """Return whether a ``/`` at ``i`` starts a JavaScript regular expression, not a division.
 
     A regular expression stands where an operand is expected: at the start,
-    after an operator or opening punctuation, or after a keyword such as
-    ``return``.
+    after an operator or opening punctuation, after a keyword such as
+    ``return``, or after the ``)`` that closes the condition of ``if``,
+    ``while``, ``for`` or ``with``.
     """
-    j = i - 1
-    while j >= 0 and src[j] in " \t\r\n":
-        j -= 1
+    j = _skip_space_back(src, i - 1)
     if j < 0:
         return True
     if src[j] in "(,=:[!&|?{};+-*%<>~^":
         return True
+    if src[j] == ")":
+        depth, k = 0, j
+        while k >= 0:
+            if src[k] == ")":
+                depth += 1
+            elif src[k] == "(":
+                depth -= 1
+                if not depth:
+                    break
+            k -= 1
+        return _word_before(src, k - 1) in CONDITION_KEYWORDS
+    return _word_before(src, j) in REGEX_KEYWORDS
+
+
+def _skip_space_back(src: str, j: int) -> int:
+    """Return the offset of the last non-whitespace character at or before ``j``, or -1."""
+    while j >= 0 and src[j] in " \t\r\n":
+        j -= 1
+    return j
+
+
+def _word_before(src: str, j: int) -> str:
+    """Return the identifier that ends at or before ``j``, skipping whitespace first."""
+    j = _skip_space_back(src, j)
     k = j
     while k >= 0 and (src[k].isalnum() or src[k] in "_$"):
         k -= 1
-    return src[k + 1 : j + 1] in REGEX_KEYWORDS
+    return src[k + 1 : j + 1]
 
 
 def _skip_regex(src: str, i: int) -> int:

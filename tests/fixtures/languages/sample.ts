@@ -14,3 +14,5 @@ export function f(size: number): string {
 const quote = /'/; // The value knows the size.
 const klass = /[/"]/g; // The option wants a list.
 const ratio = size / 2; // The ratio decides the scale.
+if (size) /'/.test(quote); // The check wants a match.
+const half = (size) / 2; // The half decides the width.
