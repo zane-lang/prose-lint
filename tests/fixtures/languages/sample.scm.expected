@@ -1,0 +1,4 @@
+languages/sample.scm:1:13: personified-verb: "The query" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.scm:3:26: personified-verb: "The pattern" is not a person or a program and cannot "want"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.scm:6:23: personified-verb: "The nested note" is not a person or a program and cannot "know"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.scm:7:14: personified-verb: "The value" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"

@@ -133,9 +133,15 @@ mentioned above".
 | `c` | `.c`, `.h`, `.cc`, `.cpp`, `.cxx`, `.hh`, `.hpp`, `.hxx` | `//` and `/* */` comments |
 | `zane` | `.zn` | `//` and `///` comments |
 | `python` | `.py`, `.pyi` | `#` comments and docstrings |
-| `hash` | `.sh`, `.bash`, `.zsh`, `.yml`, `.yaml`, `.mk`, `.cmake`, `.opam`, `Makefile`, `GNUmakefile`, `makefile`, `justfile`, `Justfile`, `.justfile`, `Dockerfile`, `CMakeLists.txt` | `#` comments |
+| `hash` | `.sh`, `.bash`, `.zsh`, `.yml`, `.yaml`, `.mk`, `.cmake`, `.opam`, `.cr`, `.ps1`, `.psm1`, `Makefile`, `GNUmakefile`, `makefile`, `justfile`, `Justfile`, `.justfile`, `Dockerfile`, `CMakeLists.txt` | `#` comments |
 | `toml` | `.toml` | `#` comments |
-| `dune` | `dune`, `dune-project`, `dune-workspace` | `;` and `#| |#` comments |
+| `dune` | `dune`, `dune-project`, `dune-workspace` | `;` and `#\| \|#` comments |
+| `scheme` | `.scm` | `;` comments and `#\| \|#` comments, nested |
+| `javascript` | `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx` | `//` and `/* */` comments, including those inside a template literal's `${ }` substitution; a regular-expression literal, or an apostrophe right after a word as in JSX text, starts no string |
+| `nix` | `.nix` | `#` and `/* */` comments, outside `"..."` strings and `''...''` indented strings |
+| `lua` | `.lua` | `--` comments and `--[[ ]]` block comments, including long brackets with `=` signs such as `--[==[ ]==]` |
+| `lean` | `.lean` | `--` comments and `/- -/` comments, nested, with `/-- -/` and `/-! -/` doc comments |
+| `astro` | `.astro` | HTML comments in the template, and JavaScript comments in its `{ }` expressions; JavaScript comments in the `---` frontmatter and `<script>` elements, and `/* */` comments in `<style>` elements |
 
 Each lexer reads string and character literals as well as comments, so a
 comment marker inside a string literal starts no comment. Before analysis,
@@ -146,6 +152,8 @@ prose-lint removes:
 - comment markers and the leading `*` of each line of a block comment;
 - lines of commented-out code, such as `// return 0;`;
 - tool pragmas such as `# noqa` and `# type: ignore`;
+- JSDoc and LuaLS annotation lines such as `@param name the name`, in
+  JavaScript, Lua and Astro files;
 - doctest examples, literal blocks and `Args:` headers from docstrings;
 - `{[ ]}` code blocks and `@param` tags from ocamldoc comments.
 

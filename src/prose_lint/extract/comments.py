@@ -85,15 +85,144 @@ C_CHAR_RE = re.compile(r"'(?:\\.[^'\n]{0,8}|[^\\'\n])'")
 CPP_RAW_RE = re.compile(r'(?:u8|[uUL])?R"([^()\\ \t\n]{0,16})\(')
 
 
-def lex_c(src: str, *, block_comments: bool = True, char_literals: bool = True) -> list[RawComment]:
-    """Lex C and C++ (``block_comments``) or Zane (line comments only)."""
+def _scan_template(src: str, j: int) -> tuple[int, bool]:
+    """Scan a template literal from ``j``, just after a backtick or a ``}``.
+
+    Return the offset after the closing backtick and ``False``, or the offset
+    after a ``${`` and ``True`` when a substitution starts there.
+    """
+    n = len(src)
+    while j < n:
+        if src[j] == "\\":
+            j += 2
+        elif src[j] == "`":
+            return j + 1, False
+        elif src.startswith("${", j):
+            return j + 2, True
+        else:
+            j += 1
+    return n, False
+
+
+CONDITION_KEYWORDS = {"if", "while", "for", "with"}
+REGEX_KEYWORDS = {"return", "typeof", "case", "do", "else", "in", "of", "new", "delete", "void", "throw", "yield", "await"}
+
+
+def _regex_allowed(src: str, i: int) -> bool:
+    """Return whether a ``/`` at ``i`` starts a JavaScript regular expression, not a division.
+
+    A regular expression stands where an operand is expected: at the start,
+    after an operator or opening punctuation, after a keyword such as
+    ``return``, or after the ``)`` that closes the condition of ``if``,
+    ``while``, ``for`` or ``with``.
+    """
+    j = _skip_space_back(src, i - 1)
+    if j < 0:
+        return True
+    if src[j] in "(,=:[!&|?{};+-*%<>~^":
+        return True
+    if src[j] == ")":
+        depth, k = 0, j
+        while k >= 0:
+            if src[k] == ")":
+                depth += 1
+            elif src[k] == "(":
+                depth -= 1
+                if not depth:
+                    break
+            k -= 1
+        return _word_before(src, k - 1) in CONDITION_KEYWORDS
+    return _word_before(src, j) in REGEX_KEYWORDS
+
+
+def _skip_space_back(src: str, j: int) -> int:
+    """Return the offset of the last non-whitespace character at or before ``j``, or -1."""
+    while j >= 0 and src[j] in " \t\r\n":
+        j -= 1
+    return j
+
+
+def _word_before(src: str, j: int) -> str:
+    """Return the identifier that ends at or before ``j``, skipping whitespace first."""
+    j = _skip_space_back(src, j)
+    k = j
+    while k >= 0 and (src[k].isalnum() or src[k] in "_$"):
+        k -= 1
+    return src[k + 1 : j + 1]
+
+
+def _skip_regex(src: str, i: int) -> int:
+    """Return the offset after the regular expression at ``i``, or ``i + 1`` when none closes on its line."""
+    j, n, in_class = i + 1, len(src), False
+    while j < n and src[j] != "\n":
+        ch = src[j]
+        if ch == "\\":
+            j += 2
+            continue
+        if ch == "[":
+            in_class = True
+        elif ch == "]":
+            in_class = False
+        elif ch == "/" and not in_class:
+            j += 1
+            while j < n and src[j].isalpha():
+                j += 1
+            return j
+        j += 1
+    return i + 1
+
+
+def lex_c(
+    src: str,
+    *,
+    block_comments: bool = True,
+    line_comments: bool = True,
+    char_literals: bool = True,
+    js: bool = False,
+) -> list[RawComment]:
+    """Lex C and C++ (``block_comments``), Zane (line comments only), JavaScript (``js``) or CSS.
+
+    JavaScript and TypeScript quote strings with ``'`` as well as ``"``, and
+    template literals in backticks span lines. The expression in a
+    template's ``${ }`` substitution is code, so the lexer reads its
+    comments. CSS (``js`` without ``line_comments``) has only ``/* */``
+    comments, so ``//`` in ``url(https://...)`` starts none.
+    """
     s = Source(src)
     out: list[RawComment] = []
     i, n = 0, len(src)
+    # One brace depth per open template substitution, innermost last.
+    subs: list[int] = []
     while i < n:
         ch = src[i]
-        if ch == '"':
+        if subs and ch == "{":
+            subs[-1] += 1
+            i += 1
+        elif subs and ch == "}":
+            if subs[-1]:
+                subs[-1] -= 1
+                i += 1
+            else:
+                subs.pop()
+                i, inner = _scan_template(src, i + 1)
+                if inner:
+                    subs.append(0)
+        elif ch == '"':
             i = _skip_string(src, i, '"', multiline=False)
+        elif js and ch == "'" and i and (src[i - 1].isalnum() or src[i - 1] == "_"):
+            # No JavaScript string opens right after a word, so this is an
+            # apostrophe in JSX text, such as "don't".
+            i += 1
+        elif js and ch == "'":
+            i = _skip_string(src, i, "'", multiline=False)
+        elif js and ch == "/" and not src.startswith(("//", "/*"), i) and _regex_allowed(src, i):
+            i = _skip_regex(src, i)
+        elif js and ch == "`":
+            i, inner = _scan_template(src, i + 1)
+            if inner:
+                subs.append(0)
+        elif js and ch in "uULR":
+            i += 1
         elif ch == "'" and char_literals:
             m = C_CHAR_RE.match(src, i)
             i = m.end() if m else i + 1
@@ -104,7 +233,7 @@ def lex_c(src: str, *, block_comments: bool = True, char_literals: bool = True) 
                 i = n if close < 0 else close + len(m.group(1)) + 2
             else:
                 i += 1
-        elif src.startswith("//", i):
+        elif line_comments and src.startswith("//", i):
             j = i
             while j < n and src[j] == "/":
                 j += 1
@@ -241,7 +370,13 @@ def _skip_single(src: str, i: int) -> int:
     return close + 1
 
 
-def lex_dune(src: str) -> list[RawComment]:
+def lex_nix(src: str) -> list[RawComment]:
+    """Lex Nix: ``#`` line comments, ``/* */`` block comments and both string forms.
+
+    An indented string runs from one pair of single quotes to the next.
+    Inside it, three single quotes, two before ``$`` and two before a
+    backslash are escapes, not the end of the string.
+    """
     s = Source(src)
     out: list[RawComment] = []
     i, n = 0, len(src)
@@ -249,6 +384,64 @@ def lex_dune(src: str) -> list[RawComment]:
         ch = src[i]
         if ch == '"':
             i = _skip_string(src, i, '"', multiline=True)
+        elif src.startswith("''", i):
+            j = i + 2
+            while j < n:
+                if src.startswith("'" * 3, j) or src.startswith("''$", j) or src.startswith("''\\", j):
+                    j += 3
+                elif src.startswith("''", j):
+                    j += 2
+                    break
+                else:
+                    j += 1
+            i = j
+        elif src.startswith("/*", i):
+            close = src.find("*/", i + 2)
+            end = n if close < 0 else close
+            out.append(RawComment("block", i + 2, end, s.own_line(i)))
+            i = n if close < 0 else close + 2
+        elif ch == "#" and (i == 0 or src[i - 1].isspace() or src[i - 1] in ";{}[]()"):
+            j = i
+            while j < n and src[j] == "#":
+                j += 1
+            end = src.find("\n", i)
+            end = n if end < 0 else end
+            out.append(RawComment("line", j, end, s.own_line(i), "#"))
+            i = end
+        else:
+            i += 1
+    return out
+
+
+def lex_dune(src: str, *, scheme: bool = False) -> list[RawComment]:
+    """Lex dune files, or Scheme (``scheme``).
+
+    Scheme block comments nest, and a character literal such as ``#\\;``
+    or ``#\\"`` holds a character that starts no comment or string.
+    """
+    s = Source(src)
+    out: list[RawComment] = []
+    i, n = 0, len(src)
+    while i < n:
+        ch = src[i]
+        if ch == '"':
+            i = _skip_string(src, i, '"', multiline=True)
+        elif scheme and src.startswith("#\\", i):
+            i += 3
+        elif scheme and src.startswith("#|", i):
+            depth, j = 1, i + 2
+            while j < n and depth:
+                if src.startswith("#|", j):
+                    depth += 1
+                    j += 2
+                elif src.startswith("|#", j):
+                    depth -= 1
+                    j += 2
+                else:
+                    j += 1
+            end = j - 2 if depth == 0 else n
+            out.append(RawComment("block", i + 2, max(i + 2, end), s.own_line(i)))
+            i = j
         elif src.startswith("#|", i):
             close = src.find("|#", i + 2)
             end = n if close < 0 else close
@@ -332,6 +525,210 @@ def _offset(src: str, s: Source, lineno: int, byte_col: int) -> int:
     end = src.find("\n", start)
     line = src[start : end if end >= 0 else len(src)]
     return start + len(line.encode("utf-8")[:byte_col].decode("utf-8", "ignore"))
+
+
+LUA_LONG_RE = re.compile(r"\[(=*)\[")
+
+
+def _skip_lua_string(src: str, i: int, quote: str) -> int:
+    """Return the offset after the Lua string whose opening quote is at ``i``.
+
+    A backslash before a newline continues the string on the next line, and
+    ``\\z`` skips the whitespace after it, newlines included.
+    """
+    j, n = i + 1, len(src)
+    while j < n:
+        ch = src[j]
+        if ch == "\\" and src.startswith("z", j + 1):
+            j += 2
+            while j < n and src[j].isspace():
+                j += 1
+        elif ch == "\\":
+            j += 2
+        elif ch == quote:
+            return j + 1
+        elif ch == "\n":
+            return j
+        else:
+            j += 1
+    return j
+
+
+def lex_lua(src: str) -> list[RawComment]:
+    """Lex Lua: ``--`` line comments, ``--[[ ]]`` block comments and long strings.
+
+    A long bracket may carry ``=`` signs (``--[==[ ... ]==]``); the closing
+    bracket carries the same number.
+    """
+    s = Source(src)
+    out: list[RawComment] = []
+    i, n = 0, len(src)
+    if src.startswith("#!"):
+        i = src.find("\n")
+        i = n if i < 0 else i
+    while i < n:
+        ch = src[i]
+        if ch in "\"'":
+            i = _skip_lua_string(src, i, ch)
+        elif ch == "[" and LUA_LONG_RE.match(src, i):
+            m = LUA_LONG_RE.match(src, i)
+            close = src.find("]" + m.group(1) + "]", m.end())
+            i = n if close < 0 else close + len(m.group(1)) + 2
+        elif src.startswith("--", i):
+            m = LUA_LONG_RE.match(src, i + 2)
+            if m:
+                close = src.find("]" + m.group(1) + "]", m.end())
+                end = n if close < 0 else close
+                out.append(RawComment("block", m.end(), end, s.own_line(i)))
+                i = n if close < 0 else close + len(m.group(1)) + 2
+                continue
+            j = i
+            while j < n and src[j] == "-":
+                j += 1
+            end = src.find("\n", i)
+            end = n if end < 0 else end
+            out.append(RawComment("line", j, end, s.own_line(i), "-"))
+            i = end
+        else:
+            i += 1
+    return out
+
+
+LEAN_CHAR_RE = re.compile(r"'(?:\\(?:[\\'\"nrt0]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4})|[^\\'\n])'")
+LEAN_RAW_RE = re.compile(r'r(#*)"')
+
+
+def lex_lean(src: str) -> list[RawComment]:
+    """Lex Lean 4: ``--`` line comments and nested ``/- -/`` block comments.
+
+    Doc comments (``/-- -/``) and module docs (``/-! -/``) are block comments
+    whose markers the lexer strips. A ``'`` inside an identifier (``h'``)
+    starts no character literal, and the lexer skips a ``«»``-quoted
+    identifier whole.
+    """
+    s = Source(src)
+    out: list[RawComment] = []
+    i, n = 0, len(src)
+    while i < n:
+        ch = src[i]
+        prev = src[i - 1] if i else ""
+        if ch == "«":
+            # A guillemet-quoted identifier may hold quotes and comment markers.
+            close = src.find("»", i + 1)
+            i = n if close < 0 else close + 1
+        elif ch == '"':
+            i = _skip_string(src, i, '"', multiline=True)
+        elif ch == "r" and not (prev.isalnum() or prev in "_'.") and LEAN_RAW_RE.match(src, i):
+            m = LEAN_RAW_RE.match(src, i)
+            close = src.find('"' + m.group(1), m.end())
+            i = n if close < 0 else close + 1 + len(m.group(1))
+        elif ch == "'" and not (prev.isalnum() or prev in "_'.") and LEAN_CHAR_RE.match(src, i):
+            i = LEAN_CHAR_RE.match(src, i).end()
+        elif src.startswith("/-", i):
+            start = i
+            j = i + 2
+            while j < n and src[j] in "-!" and not src.startswith("-/", j):
+                j += 1
+            content = j
+            depth = 1
+            while j < n and depth:
+                if src.startswith("/-", j):
+                    depth += 1
+                    j += 2
+                elif src.startswith("-/", j):
+                    depth -= 1
+                    j += 2
+                else:
+                    j += 1
+            end = j - 2 if depth == 0 else n
+            out.append(RawComment("block", content, max(content, end), s.own_line(start)))
+            i = j
+        elif src.startswith("--", i):
+            j = i
+            while j < n and src[j] == "-":
+                j += 1
+            end = src.find("\n", i)
+            end = n if end < 0 else end
+            out.append(RawComment("line", j, end, s.own_line(i), "-"))
+            i = end
+        else:
+            i += 1
+    return out
+
+
+ASTRO_FENCE_RE = re.compile(r"\A---[ \t]*\n(.*?\n)?---[ \t]*(?:\n|\Z)", re.S)
+ASTRO_RAW_RE = re.compile(r"<(script|style)\b[^>]*>(.*?)</\1\s*>", re.S | re.I)
+
+
+def _shifted(comments: list[RawComment], offset: int) -> list[RawComment]:
+    for c in comments:
+        c.start += offset
+        c.end += offset
+    return comments
+
+
+def _js_expression_end(src: str, i: int) -> int:
+    """Return the offset after the ``}`` that closes the JavaScript expression opened by the ``{`` at ``i``."""
+    j, n, depth = i + 1, len(src), 1
+    while j < n:
+        ch = src[j]
+        if ch in "\"'`":
+            j = _skip_string(src, j, ch, multiline=ch == "`")
+            continue
+        if src.startswith("/*", j):
+            close = src.find("*/", j + 2)
+            j = n if close < 0 else close + 2
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if not depth:
+                return j + 1
+        j += 1
+    return n
+
+
+def lex_astro(src: str) -> list[RawComment]:
+    """Lex an Astro component.
+
+    The ``---`` fenced frontmatter and each ``<script>`` and ``<style>``
+    element hold JavaScript, TypeScript or CSS, which the JavaScript lexer
+    reads, with ``/* */`` comments alone in CSS. The template between them
+    holds HTML comments (``<!-- -->``) and ``{ }`` expressions, which the
+    JavaScript lexer reads, so a comment inside one is found and a quoted
+    ``/*`` is not.
+    """
+    s = Source(src)
+    out: list[RawComment] = []
+    i, n = 0, len(src)
+    m = ASTRO_FENCE_RE.match(src)
+    if m:
+        if m.group(1):
+            out.extend(_shifted(lex_c(m.group(1), js=True), m.start(1)))
+        i = m.end()
+    while i < n:
+        if src.startswith("<!--", i):
+            close = src.find("-->", i + 4)
+            end = n if close < 0 else close
+            out.append(RawComment("block", i + 4, end, s.own_line(i)))
+            i = n if close < 0 else close + 3
+        elif src[i] == "{":
+            end = _js_expression_end(src, i)
+            body = _shifted(lex_c(src[i + 1 : end - 1], js=True), i + 1)
+            for c in body:
+                marker = max(src.rfind("//", i, c.start), src.rfind("/*", i, c.start))
+                c.own_line = s.own_line(marker)
+            out.extend(body)
+            i = end
+        elif src[i] == "<" and ASTRO_RAW_RE.match(src, i):
+            r = ASTRO_RAW_RE.match(src, i)
+            css = r.group(1).lower() == "style"
+            out.extend(_shifted(lex_c(r.group(2), js=True, line_comments=not css), r.start(2)))
+            i = r.end()
+        else:
+            i += 1
+    return out
 
 
 # ------------------------------------------------------------- cleanup
@@ -482,7 +879,12 @@ def _docstring_lines(lines: list[PText]) -> list[PText]:
     return out
 
 
-def comments_to_segments(src: str, comments: list[RawComment], dialect: str) -> Extracted:
+# A JSDoc or LuaLS annotation line (``@param name the name``) documents a
+# signature in a fixed syntax, not a sentence.
+TAG_LINE_RE = re.compile(r"^\s*@[A-Za-z]")
+
+
+def comments_to_segments(src: str, comments: list[RawComment], dialect: str, *, tags: bool = False) -> Extracted:
     s = Source(src)
     out = Extracted()
     groups: list[list[RawComment]] = []
@@ -513,7 +915,7 @@ def comments_to_segments(src: str, comments: list[RawComment], dialect: str) -> 
             lines = _drop_ocaml_code_blocks(lines)
         cleaned = []
         for ln in lines:
-            if PRAGMA_RE.match(ln.text) or looks_like_code(ln.text):
+            if PRAGMA_RE.match(ln.text) or looks_like_code(ln.text) or (tags and TAG_LINE_RE.match(ln.text)):
                 cleaned.append(PText())
             else:
                 cleaned.append(ln)
@@ -536,4 +938,16 @@ def extract_comments(src: str, language: str) -> Extracted:
         return comments_to_segments(src, lex_hash(src, toml=True), COMMENT)
     if language == "dune":
         return comments_to_segments(src, lex_dune(src), COMMENT)
+    if language == "nix":
+        return comments_to_segments(src, lex_nix(src), COMMENT)
+    if language == "scheme":
+        return comments_to_segments(src, lex_dune(src, scheme=True), COMMENT)
+    if language == "javascript":
+        return comments_to_segments(src, lex_c(src, js=True), COMMENT, tags=True)
+    if language == "lua":
+        return comments_to_segments(src, lex_lua(src), COMMENT, tags=True)
+    if language == "lean":
+        return comments_to_segments(src, lex_lean(src), COMMENT)
+    if language == "astro":
+        return comments_to_segments(src, lex_astro(src), COMMENT, tags=True)
     raise ValueError(f"no comment lexer for language {language!r}")
