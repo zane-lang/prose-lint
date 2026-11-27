@@ -1,0 +1,3 @@
+languages/sample.toml:1:11: personified-verb: "The key" is not a person or a program and cannot "say"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.toml:1:16: placeholder-noun: "what it is" is a free relative clause; name the exact term instead, such as "the element type" or "the verb's symbol"
+languages/sample.toml:1:21: self-reference: the sentence ends on "it is", which points back at its own subject "The key"; end on the new fact instead

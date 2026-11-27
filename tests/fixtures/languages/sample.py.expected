@@ -1,0 +1,5 @@
+languages/sample.py:2:15: personified-verb: "The module" is not a person or a program and cannot "say"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.py:2:20: placeholder-noun: "what it is" is a free relative clause; name the exact term instead, such as "the element type" or "the verb's symbol"
+languages/sample.py:2:25: self-reference: the sentence ends on "it is", which points back at its own subject "The module"; end on the new fact instead
+languages/sample.py:7:12: personified-verb: "The flag" is not a person or a program and cannot "tell"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.py:15:26: personified-verb: "the value" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"

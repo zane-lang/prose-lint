@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --frozen
+      - run: uv run --frozen pytest
+      # The project's own prose has to pass its own linter.
+      - run: uv run --frozen prose-lint README.md justfile pyproject.toml src tests/conftest.py tests/test_cli.py tests/test_golden.py

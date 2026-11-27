@@ -1,0 +1,6 @@
+; The stanza says what it is.
+(executable
+ (name main) ; The name decides the binary.
+ (flags (:standard "-w" "; The text says so.")))
+#| The library knows
+   nothing. |#

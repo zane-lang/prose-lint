@@ -1,0 +1,31 @@
+[project]
+name = "prose-lint"
+version = "0.1.0"
+description = "A deterministic linter for technical prose in Markdown files and code comments"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "spacy==3.8.7",
+    # spaCy imports click, but the typer release it resolves to no longer installs it.
+    "click==8.1.8",
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85",
+]
+
+[project.scripts]
+prose-lint = "prose_lint.cli:main"
+
+[dependency-groups]
+dev = ["pytest==8.4.2"]
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prose_lint"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

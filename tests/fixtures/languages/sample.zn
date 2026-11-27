@@ -1,0 +1,7 @@
+/// The record says what it is.
+/// The parser reads each field.
+verb main() {
+    // The flag decides the target.
+    let s = "// The text says so.";
+    let t = "say \"// The value knows\"";
+}
