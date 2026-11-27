@@ -93,8 +93,10 @@ def _same_phrase(toks):
     words = [t.lower_ for t in toks[-3:]]
     if len(toks) >= 2 and words[-2:] == ["the", "same"]:
         return toks[-2:]
+    # "the same way" passes: it usually points at the method of the previous
+    # sentence ("A variadic function is reached the same way"), not at the
+    # sentence's own subject.
     if len(toks) >= 3 and words[-3:-1] == ["the", "same"] and toks[-1].lemma_.lower() in PLACEHOLDER_NOUNS | {
-        "way",
         "one",
         "ones",
     }:

@@ -11,8 +11,9 @@ PERSONIFIED_VERBS = frozenset(
     """.split()
 )
 
-# Nouns that may be the subject of a verb in PERSONIFIED_VERBS: people, and
-# programs or program parts that run and act.
+# Nouns that may be the subject of a verb in PERSONIFIED_VERBS: people,
+# programs or program parts that run and act, and projects and packages,
+# which stand for the people who maintain them.
 AGENT_NOUNS = frozenset(
     """
     user reader writer author maintainer contributor developer programmer
@@ -33,6 +34,8 @@ AGENT_NOUNS = frozenset(
     collector manager controller router dispatcher planner installer
     toolchain debugger profiler preprocessor transpiler bundler consumer
     producer publisher subscriber sender receiver listener observer
+
+    project package
     """.split()
 )
 
@@ -43,6 +46,11 @@ AGENT_PRONOUNS = frozenset(
     nobody who whoever us me him her them
     """.split()
 )
+
+# Verbs so general that a free relative clause built on one names no term:
+# "what it is", "what the step does", "what happens". A free relative with a
+# specific verb, such as "what crosses the boundary", passes.
+VAGUE_VERBS = frozenset("be do happen mean say go have get make become".split())
 
 # Pronouns that refer to objects, values and clauses, never to people.
 THING_PRONOUNS = frozenset(

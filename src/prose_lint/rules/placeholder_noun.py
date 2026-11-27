@@ -1,11 +1,14 @@
 """placeholder-noun: a vague noun or a free relative clause in place of the
-exact term ("a name", "the thing", "what it is", "what the step does")."""
+exact term ("a name", "the thing", "what it is", "what the step does").
+
+A free relative clause counts only when its verb is vague (VAGUE_VERBS in
+words.py): "what it is" is reported, "what crosses the boundary" is not."""
 
 from __future__ import annotations
 
 from ..segment import Segment
 from .base import ERROR, Hit, Rule, is_code
-from .words import PLACEHOLDER_NOUNS, PLACEHOLDER_PRONOUNS
+from .words import PLACEHOLDER_NOUNS, PLACEHOLDER_PRONOUNS, VAGUE_VERBS
 
 INDEFINITE = frozenset("a an some any another one".split())
 
@@ -18,6 +21,7 @@ class PlaceholderNoun(Rule):
     def __init__(self, options=None):
         super().__init__(options)
         self.nouns = self.word_list("nouns", PLACEHOLDER_NOUNS)
+        self.vague_verbs = self.word_list("vague-verbs", VAGUE_VERBS)
 
     def check(self, sent, seg: Segment):
         question = sent.text.rstrip().endswith("?")
@@ -27,7 +31,7 @@ class PlaceholderNoun(Rule):
             low = tok.lower_
             lemma = tok.lemma_.lower()
 
-            if low == "what" and tok.tag_ == "WP" and not question:
+            if low == "what" and tok.tag_ == "WP" and not question and self._vague(tok):
                 clause = _clause(tok)
                 yield Hit(
                     clause.start_char,
@@ -63,6 +67,14 @@ class PlaceholderNoun(Rule):
                 yield Hit(np.start_char, np.end_char, f'"{np.text}" is a placeholder; name the kind')
 
 
+    def _vague(self, what) -> bool:
+        """Report whether the verb of the free relative that ``what`` opens is vague."""
+        verb = what.head
+        if verb.i < what.i or verb.pos_ not in ("VERB", "AUX"):
+            return False
+        return verb.lemma_.lower() in self.vague_verbs
+
+
 def _clause(what):
     """Return the span of the free relative clause that ``what`` opens."""
     doc = what.doc
@@ -72,6 +84,11 @@ def _clause(what):
         if c.dep_ in ("conj", "cc", "punct", "appos", "parataxis", "advcl", "npadvmod"):
             break
         end = max(end, c.right_edge.i)
+    # A dash, a parenthesis or a semicolon ends the clause in the report.
+    for t in doc[what.i + 1 : end + 1]:
+        if t.text in ("—", "–", "(", ";", "--"):
+            end = t.i - 1
+            break
     while end > what.i and (doc[end].is_punct or doc[end].dep_ in ("cc", "punct")):
         end -= 1
     return doc[what.i : end + 1]

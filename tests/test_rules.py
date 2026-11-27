@@ -21,6 +21,8 @@ BAD = [
     ("There is a way to skip the check.", "placeholder-noun"),
     ("Something calls the hook twice.", "placeholder-noun"),
     ("Pick the one that matches the target.", "placeholder-noun"),
+    ("The log shows what happens next.", "placeholder-noun"),
+    ("The docs explain what the flag means for the build.", "placeholder-noun"),
     # self-reference
     ("The case of a name says what it is.", "self-reference"),
     ("The text says so.", "self-reference"),
@@ -54,6 +56,9 @@ GOOD = [
     "The function returns the element type.",
     "Only an unescaped double quote closes it.",
     'The verb "say" takes a subject.',
+    "The reach of the closure is the reach of what it captures.",
+    "A variadic C function is reached the same way.",
+    "A project wants a stable API, and the package decides its own version.",
     'Write "the element type" instead of "the thing".',
     "The phrase \u201cwhat it is\u201d is a free relative clause.",
 ]

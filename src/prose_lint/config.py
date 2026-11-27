@@ -28,7 +28,7 @@ CONFIG_NAMES = ("prose-lint.toml", ".prose-lint.toml")
 TOP_KEYS = {"disable", "exclude", "languages", "rules"}
 RULE_KEYS = {
     "personified-verb": {"severity", "extra-verbs", "extra-agents"},
-    "placeholder-noun": {"severity", "extra-nouns"},
+    "placeholder-noun": {"severity", "extra-nouns", "extra-vague-verbs"},
     "self-reference": {"severity"},
     "stale-ending": {"severity"},
 }

@@ -78,16 +78,19 @@ a property, a value, a file or a type may not.
 | "The flag tells the linker where to look." | The flag gives the linker a search path. |
 | "This means that the parser must backtrack." | The parser must therefore backtrack. |
 
-Programs and people that may act are listed in
-`src/prose_lint/rules/words.py`: the compiler, the linker, the parser, a
-function and the user. A subject that is a proper noun (`Git`,
-`OCaml`) passes unless it looks like a file name.
+The subjects that may act are listed in `src/prose_lint/rules/words.py`:
+people such as the user, programs such as the compiler, the linker, the
+parser or a function, and projects and packages, which stand for the people
+who maintain them. A subject that is a proper noun (`Git`, `OCaml`) passes
+unless it looks like a file name.
 
 ### placeholder-noun
 
-The rule reports free relative clauses ("what it is", "what the step does")
-and placeholder nouns: "thing", "stuff", "something", an indefinite "a way" or
-"a name" without a modifier, "the one", and "its kind".
+The rule reports free relative clauses whose verb is vague ("what it is",
+"what the step does", "what happens") and placeholder nouns: "thing", "stuff", "something", an indefinite "a way" or
+"a name" without a modifier, "the one", and "its kind". A free relative
+clause with a specific verb, such as "what crosses the boundary", passes;
+the vague verbs are listed in `src/prose_lint/rules/words.py`.
 
 | Defect | Rewrite |
 |---|---|
@@ -99,8 +102,9 @@ and placeholder nouns: "thing", "stuff", "something", an indefinite "a way" or
 
 The rule reports a sentence whose last words point back at an earlier part
 of the same sentence: a clause that ends on its own pronoun subject ("says
-what it is"), a final "so" ("the text says so"), and a final "the same" or
-"the same thing".
+what it is"), a final "so" ("the text says so"), and a final "the same",
+"the same thing" or "the same one". A final "the same way" passes, because it
+usually points at the method of the previous sentence.
 
 | Defect | Rewrite |
 |---|---|
@@ -199,7 +203,8 @@ extra-verbs = ["suggest"]
 ```
 
 Every rule accepts `severity`. `personified-verb` also accepts `extra-agents`
-and `extra-verbs`, and `placeholder-noun` accepts `extra-nouns`. prose-lint
+and `extra-verbs`, and `placeholder-noun` accepts `extra-nouns` and
+`extra-vague-verbs`. prose-lint
 rejects unknown keys, rule ids and languages with exit status 2.
 
 ## Development
