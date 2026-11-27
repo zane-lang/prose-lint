@@ -37,3 +37,23 @@ def test_extraction(lint, language, text, count):
 def test_setext_heading_is_a_heading(lint):
     rules = {f.rule for f in lint("The case of a name says what it is\n---\n")}
     assert "self-reference" not in rules and "personified-verb" in rules
+
+
+@pytest.mark.parametrize(
+    "name,language",
+    [
+        ("init.lua", "lua"),
+        ("Proof.lean", "lean"),
+        ("Page.astro", "astro"),
+        ("site.mjs", "javascript"),
+        ("view.tsx", "javascript"),
+        ("zane.cr", "hash"),
+        ("flake.nix", "hash"),
+        ("install.ps1", "hash"),
+        ("highlights.scm", "dune"),
+    ],
+)
+def test_language_for(name, language):
+    from prose_lint.extract import language_for
+
+    assert language_for(name) == language

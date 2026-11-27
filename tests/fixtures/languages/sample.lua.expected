@@ -1,0 +1,6 @@
+languages/sample.lua:2:16: personified-verb: "The record" is not a person or a program and cannot "say"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.lua:2:21: placeholder-noun: "what it is" is a free relative clause; name the exact term instead, such as "the element type" or "the verb's symbol"
+languages/sample.lua:2:26: self-reference: the sentence ends on "it is", which points back at its own subject "The record"; end on the new fact instead
+languages/sample.lua:5:15: personified-verb: "The flag" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.lua:11:19: personified-verb: "The option" is not a person or a program and cannot "want"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"
+languages/sample.lua:14:14: personified-verb: "The config" is not a person or a program and cannot "decide"; make the program or person that acts the subject, or use a verb such as "holds", "marks", "declares" or "determines"

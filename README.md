@@ -133,9 +133,13 @@ mentioned above".
 | `c` | `.c`, `.h`, `.cc`, `.cpp`, `.cxx`, `.hh`, `.hpp`, `.hxx` | `//` and `/* */` comments |
 | `zane` | `.zn` | `//` and `///` comments |
 | `python` | `.py`, `.pyi` | `#` comments and docstrings |
-| `hash` | `.sh`, `.bash`, `.zsh`, `.yml`, `.yaml`, `.mk`, `.cmake`, `.opam`, `Makefile`, `GNUmakefile`, `makefile`, `justfile`, `Justfile`, `.justfile`, `Dockerfile`, `CMakeLists.txt` | `#` comments |
+| `hash` | `.sh`, `.bash`, `.zsh`, `.yml`, `.yaml`, `.mk`, `.cmake`, `.opam`, `.cr`, `.nix`, `.ps1`, `.psm1`, `Makefile`, `GNUmakefile`, `makefile`, `justfile`, `Justfile`, `.justfile`, `Dockerfile`, `CMakeLists.txt` | `#` comments |
 | `toml` | `.toml` | `#` comments |
-| `dune` | `dune`, `dune-project`, `dune-workspace` | `;` and `#| |#` comments |
+| `dune` | `dune`, `dune-project`, `dune-workspace`, `.scm` | `;` and `#| |#` comments |
+| `javascript` | `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.mts`, `.cts`, `.tsx` | `//` and `/* */` comments |
+| `lua` | `.lua` | `--` and `--[[ ]]` comments |
+| `lean` | `.lean` | `--` comments and `/- -/` comments, nested, with `/-- -/` and `/-! -/` doc comments |
+| `astro` | `.astro` | HTML comments and `{/* */}` in the template; JavaScript comments in the `---` frontmatter and in `<script>` and `<style>` elements |
 
 Each lexer reads string and character literals as well as comments, so a
 comment marker inside a string literal starts no comment. Before analysis,
@@ -146,6 +150,8 @@ prose-lint removes:
 - comment markers and the leading `*` of each line of a block comment;
 - lines of commented-out code, such as `// return 0;`;
 - tool pragmas such as `# noqa` and `# type: ignore`;
+- JSDoc and LuaLS annotation lines such as `@param name the name`, in
+  JavaScript, Lua and Astro files;
 - doctest examples, literal blocks and `Args:` headers from docstrings;
 - `{[ ]}` code blocks and `@param` tags from ocamldoc comments.
 

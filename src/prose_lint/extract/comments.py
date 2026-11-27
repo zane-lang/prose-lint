@@ -85,8 +85,14 @@ C_CHAR_RE = re.compile(r"'(?:\\.[^'\n]{0,8}|[^\\'\n])'")
 CPP_RAW_RE = re.compile(r'(?:u8|[uUL])?R"([^()\\ \t\n]{0,16})\(')
 
 
-def lex_c(src: str, *, block_comments: bool = True, char_literals: bool = True) -> list[RawComment]:
-    """Lex C and C++ (``block_comments``) or Zane (line comments only)."""
+def lex_c(
+    src: str, *, block_comments: bool = True, char_literals: bool = True, js: bool = False
+) -> list[RawComment]:
+    """Lex C and C++ (``block_comments``), Zane (line comments only) or JavaScript (``js``).
+
+    JavaScript and TypeScript quote strings with ``'`` as well as ``"``, and
+    template literals in backticks span lines.
+    """
     s = Source(src)
     out: list[RawComment] = []
     i, n = 0, len(src)
@@ -94,6 +100,12 @@ def lex_c(src: str, *, block_comments: bool = True, char_literals: bool = True) 
         ch = src[i]
         if ch == '"':
             i = _skip_string(src, i, '"', multiline=False)
+        elif js and ch == "'":
+            i = _skip_string(src, i, "'", multiline=False)
+        elif js and ch == "`":
+            i = _skip_string(src, i, "`", multiline=True)
+        elif js and ch in "uULR":
+            i += 1
         elif ch == "'" and char_literals:
             m = C_CHAR_RE.match(src, i)
             i = m.end() if m else i + 1
@@ -334,6 +346,153 @@ def _offset(src: str, s: Source, lineno: int, byte_col: int) -> int:
     return start + len(line.encode("utf-8")[:byte_col].decode("utf-8", "ignore"))
 
 
+LUA_LONG_RE = re.compile(r"\[(=*)\[")
+
+
+def lex_lua(src: str) -> list[RawComment]:
+    """Lex Lua: ``--`` line comments, ``--[[ ]]`` block comments and long strings.
+
+    A long bracket may carry ``=`` signs (``--[==[ ... ]==]``); the closing
+    bracket carries the same number.
+    """
+    s = Source(src)
+    out: list[RawComment] = []
+    i, n = 0, len(src)
+    if src.startswith("#!"):
+        i = src.find("\n")
+        i = n if i < 0 else i
+    while i < n:
+        ch = src[i]
+        if ch in "\"'":
+            i = _skip_string(src, i, ch, multiline=False)
+        elif ch == "[" and LUA_LONG_RE.match(src, i):
+            m = LUA_LONG_RE.match(src, i)
+            close = src.find("]" + m.group(1) + "]", m.end())
+            i = n if close < 0 else close + len(m.group(1)) + 2
+        elif src.startswith("--", i):
+            m = LUA_LONG_RE.match(src, i + 2)
+            if m:
+                close = src.find("]" + m.group(1) + "]", m.end())
+                end = n if close < 0 else close
+                out.append(RawComment("block", m.end(), end, s.own_line(i)))
+                i = n if close < 0 else close + len(m.group(1)) + 2
+                continue
+            j = i
+            while j < n and src[j] == "-":
+                j += 1
+            end = src.find("\n", i)
+            end = n if end < 0 else end
+            out.append(RawComment("line", j, end, s.own_line(i), "-"))
+            i = end
+        else:
+            i += 1
+    return out
+
+
+LEAN_CHAR_RE = re.compile(r"'(?:\\(?:[\\'\"nrt0]|x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4})|[^\\'\n])'")
+LEAN_RAW_RE = re.compile(r'r(#*)"')
+
+
+def lex_lean(src: str) -> list[RawComment]:
+    """Lex Lean 4: ``--`` line comments and nested ``/- -/`` block comments.
+
+    Doc comments (``/-- -/``) and module docs (``/-! -/``) are block comments
+    whose markers the lexer strips. A ``'`` inside an identifier (``h'``)
+    starts no character literal.
+    """
+    s = Source(src)
+    out: list[RawComment] = []
+    i, n = 0, len(src)
+    while i < n:
+        ch = src[i]
+        prev = src[i - 1] if i else ""
+        if ch == '"':
+            i = _skip_string(src, i, '"', multiline=True)
+        elif ch == "r" and not (prev.isalnum() or prev in "_'.") and LEAN_RAW_RE.match(src, i):
+            m = LEAN_RAW_RE.match(src, i)
+            close = src.find('"' + m.group(1), m.end())
+            i = n if close < 0 else close + 1 + len(m.group(1))
+        elif ch == "'" and not (prev.isalnum() or prev in "_'.") and LEAN_CHAR_RE.match(src, i):
+            i = LEAN_CHAR_RE.match(src, i).end()
+        elif src.startswith("/-", i):
+            start = i
+            j = i + 2
+            while j < n and src[j] in "-!" and not src.startswith("-/", j):
+                j += 1
+            content = j
+            depth = 1
+            while j < n and depth:
+                if src.startswith("/-", j):
+                    depth += 1
+                    j += 2
+                elif src.startswith("-/", j):
+                    depth -= 1
+                    j += 2
+                else:
+                    j += 1
+            end = j - 2 if depth == 0 else n
+            out.append(RawComment("block", content, max(content, end), s.own_line(start)))
+            i = j
+        elif src.startswith("--", i):
+            j = i
+            while j < n and src[j] == "-":
+                j += 1
+            end = src.find("\n", i)
+            end = n if end < 0 else end
+            out.append(RawComment("line", j, end, s.own_line(i), "-"))
+            i = end
+        else:
+            i += 1
+    return out
+
+
+ASTRO_FENCE_RE = re.compile(r"\A---[ \t]*\n(.*?\n)?---[ \t]*(?:\n|\Z)", re.S)
+ASTRO_RAW_RE = re.compile(r"<(script|style)\b[^>]*>(.*?)</\1\s*>", re.S | re.I)
+
+
+def _shifted(comments: list[RawComment], offset: int) -> list[RawComment]:
+    for c in comments:
+        c.start += offset
+        c.end += offset
+    return comments
+
+
+def lex_astro(src: str) -> list[RawComment]:
+    """Lex an Astro component.
+
+    The ``---`` fenced frontmatter and each ``<script>`` and ``<style>``
+    element hold JavaScript, TypeScript or CSS, which the JavaScript lexer
+    reads. The template between them holds HTML comments (``<!-- -->``)
+    and JSX-style comments in expressions (``{/* */}``).
+    """
+    s = Source(src)
+    out: list[RawComment] = []
+    i, n = 0, len(src)
+    m = ASTRO_FENCE_RE.match(src)
+    if m:
+        if m.group(1):
+            out.extend(_shifted(lex_c(m.group(1), js=True), m.start(1)))
+        i = m.end()
+    while i < n:
+        if src.startswith("<!--", i):
+            close = src.find("-->", i + 4)
+            end = n if close < 0 else close
+            out.append(RawComment("block", i + 4, end, s.own_line(i)))
+            i = n if close < 0 else close + 3
+        elif src.startswith("{/*", i):
+            close = src.find("*/", i + 3)
+            end = n if close < 0 else close
+            out.append(RawComment("block", i + 3, end, s.own_line(i)))
+            i = n if close < 0 else close + 2
+        elif src[i] == "<" and ASTRO_RAW_RE.match(src, i):
+            r = ASTRO_RAW_RE.match(src, i)
+            out.extend(_shifted(lex_c(r.group(2), js=True), r.start(2)))
+            i = r.end()
+        else:
+            i += 1
+    return out
+
+
 # ------------------------------------------------------------- cleanup
 
 # Tool pragmas and file headers that are not prose.
@@ -482,7 +641,12 @@ def _docstring_lines(lines: list[PText]) -> list[PText]:
     return out
 
 
-def comments_to_segments(src: str, comments: list[RawComment], dialect: str) -> Extracted:
+# A JSDoc or LuaLS annotation line (``@param name the name``) documents a
+# signature in a fixed syntax, not a sentence.
+TAG_LINE_RE = re.compile(r"^\s*@[A-Za-z]")
+
+
+def comments_to_segments(src: str, comments: list[RawComment], dialect: str, *, tags: bool = False) -> Extracted:
     s = Source(src)
     out = Extracted()
     groups: list[list[RawComment]] = []
@@ -513,7 +677,7 @@ def comments_to_segments(src: str, comments: list[RawComment], dialect: str) -> 
             lines = _drop_ocaml_code_blocks(lines)
         cleaned = []
         for ln in lines:
-            if PRAGMA_RE.match(ln.text) or looks_like_code(ln.text):
+            if PRAGMA_RE.match(ln.text) or looks_like_code(ln.text) or (tags and TAG_LINE_RE.match(ln.text)):
                 cleaned.append(PText())
             else:
                 cleaned.append(ln)
@@ -536,4 +700,12 @@ def extract_comments(src: str, language: str) -> Extracted:
         return comments_to_segments(src, lex_hash(src, toml=True), COMMENT)
     if language == "dune":
         return comments_to_segments(src, lex_dune(src), COMMENT)
+    if language == "javascript":
+        return comments_to_segments(src, lex_c(src, js=True), COMMENT, tags=True)
+    if language == "lua":
+        return comments_to_segments(src, lex_lua(src), COMMENT, tags=True)
+    if language == "lean":
+        return comments_to_segments(src, lex_lean(src), COMMENT)
+    if language == "astro":
+        return comments_to_segments(src, lex_astro(src), COMMENT, tags=True)
     raise ValueError(f"no comment lexer for language {language!r}")

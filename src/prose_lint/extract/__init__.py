@@ -12,7 +12,7 @@ from ..segment import Extracted
 from .blocks import parse_blocks
 from .comments import Source, extract_comments
 
-LANGUAGES = ("markdown", "ocaml", "c", "zane", "python", "hash", "toml", "dune")
+LANGUAGES = ("markdown", "ocaml", "c", "zane", "python", "hash", "toml", "dune", "javascript", "lua", "lean", "astro")
 
 EXTENSIONS = {
     ".md": "markdown",
@@ -40,6 +40,22 @@ EXTENSIONS = {
     ".cmake": "hash",
     ".opam": "hash",
     ".toml": "toml",
+    ".cr": "hash",
+    ".nix": "hash",
+    ".ps1": "hash",
+    ".psm1": "hash",
+    ".scm": "dune",
+    ".js": "javascript",
+    ".mjs": "javascript",
+    ".cjs": "javascript",
+    ".jsx": "javascript",
+    ".ts": "javascript",
+    ".mts": "javascript",
+    ".cts": "javascript",
+    ".tsx": "javascript",
+    ".lua": "lua",
+    ".lean": "lean",
+    ".astro": "astro",
 }
 
 FILE_NAMES = {
